@@ -38,6 +38,68 @@ Herdr has two distinct CLI surfaces depending on whether you run the **`herdr-co
 
 ---
 
+## Prerequisites: Install Herdr & CLI Tools
+
+Your orchestrator agent **must** be running inside a Herdr-managed terminal (`$HC_TERMINAL_ID` for `hc`/`herdr-app`, or `$HERDR_PANE_ID` for `herdr` TUI) so it can spawn and message workers.
+
+### Option A: Herdr App + `herdr-core` (`hc` + `herdr-app`)
+
+For `herdr-orchestrator` and `herdr-worker`:
+
+```bash
+# macOS / Linux (installs Herdr.app + herdr-core / hc)
+curl -fsSL https://releases.herdr.dev/app/install.sh | sh
+
+# macOS Homebrew Cask
+brew install --cask herdr-app
+
+# Headless / Linux server (herdr-core / hc only, no desktop app)
+curl -fsSL https://releases.herdr.dev/core/install.sh | sh
+```
+
+Windows (PowerShell):
+```powershell
+irm https://releases.herdr.dev/app/install.ps1 | iex
+# or headless core only:
+irm https://releases.herdr.dev/core/install.ps1 | iex
+```
+
+Verify inside a Herdr terminal:
+```bash
+test -n "${HC_TERMINAL_ID:-}" && hc ls
+```
+
+### Option B: Herdr TUI (`herdr`)
+
+For `herdr-tui-orchestrator` and `herdr-tui-worker`:
+
+```bash
+# macOS / Linux
+curl -fsSL https://herdr.dev/install.sh | sh
+
+# Alternative package managers
+brew install herdr
+mise use -g herdr
+```
+
+Windows (PowerShell):
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
+```
+
+Verify inside a Herdr TUI pane:
+```bash
+test -n "${HERDR_PANE_ID:-}" && herdr agent list
+```
+
+### Additional CLI Prerequisites
+
+- **`git`** (for per-worker `git worktree` isolation and branch management)
+- **At least one terminal coding agent:** `agy` (Antigravity CLI), `claude`, `pi`, `codex`, or `opencode`
+- **GitHub CLI (`gh`, optional):** Authenticate with `gh auth login` if you want workers to open/update PRs automatically
+
+---
+
 ## Installation
 
 ### Option 1: `skills` CLI (`npx skills`)
