@@ -50,22 +50,37 @@ npx skills add xphiwork-dot/herdr-skills --skill herdr-orchestrator --skill herd
 npx skills add xphiwork-dot/herdr-skills --skill herdr-tui-orchestrator --skill herdr-tui-worker -g
 ```
 
-### Option 2: Local Installer Script (Antigravity, Claude Code, Codex, Pi)
+### Option 2: Local Installer Script (Antigravity `.gemini/`, Claude Code, Codex, Pi)
 
 ```bash
 git clone https://github.com/xphiwork-dot/herdr-skills.git
 cd herdr-skills
 
-# Install hc + herdr-app variant to ~/.agents/skills (Antigravity / OpenCode / universal)
-./install.sh --variant app
+# Antigravity (auto-detects ~/.gemini/antigravity-cli/skills, ~/.gemini/antigravity/skills, or ~/.gemini/config/skills)
+./install.sh --variant app --antigravity
 
-# Install Herdr TUI variant instead
-./install.sh --variant tui
+# Or target a specific Antigravity ~/.gemini/ directory explicitly
+./install.sh --variant app --agy-cli     # ~/.gemini/antigravity-cli/skills (Antigravity CLI)
+./install.sh --variant app --agy-ide     # ~/.gemini/antigravity/skills     (Antigravity IDE)
+./install.sh --variant app --gemini      # ~/.gemini/config/skills          (Global ~/.gemini/config discovery)
+
+# Universal ~/.agents/skills (OpenCode, workspace/shared, or registered in ~/.gemini/config/skills.json)
+./install.sh --variant app
+./install.sh --variant tui               # Herdr TUI variant
 
 # Target Claude Code (~/.claude/skills), Codex (~/.codex/skills), or symlink for live edits
 ./install.sh --variant app --claude
-./install.sh --variant all --symlink
+./install.sh --variant all --antigravity --symlink
 ```
+
+> **Antigravity `~/.gemini/config/skills.json` alternative:** You can also point Antigravity directly at a cloned repo or `~/.agents/skills` in `~/.gemini/config/skills.json`:
+> ```json
+> {
+>   "entries": [
+>     { "path": "/path/to/herdr-skills/skills" }
+>   ]
+> }
+> ```
 
 ### Option 3: Pi (`pi` Coding Agent Package)
 

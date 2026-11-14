@@ -42,9 +42,9 @@ If not, explain that this session is not in a Herdr-managed terminal and stop (n
   ```sh
   hc run --bg --name <type>-<topic> --cwd "<worktree>" <agent-cmd>
   hc wait <type>-<topic>   # verify output says "idle" before sending
-  hc send <type>-<topic> "Use the herdr-worker skill in ~/.agents/skills/herdr-worker/SKILL.md. Execute <state-dir>/tasks/<type>-<topic>.md. No subagents. Report via: hc send $HC_TERMINAL_ID \"<summary>\""
+  hc send <type>-<topic> "Use the herdr-worker skill (<skills-dir>/herdr-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute <state-dir>/tasks/<type>-<topic>.md. No subagents. Report via: hc send $HC_TERMINAL_ID \"<summary>\""
   ```
-  *(If using a template inline task and `first_message.sent` is `false`, inspect via `hc get` + `hc read --lines 80` before resending. For remote `--on <machine>` workers that lack `~/.agents/skills/herdr-worker/SKILL.md`, inline the `herdr-worker` rules.)*
+  *(Pass the exact installed path to `herdr-worker/SKILL.md`. If using a template inline task and `first_message.sent` is `false`, inspect via `hc get` + `hc read --lines 80` before resending. For remote `--on <machine>` workers that lack `herdr-worker/SKILL.md`, inline the `herdr-worker` rules.)*
 
 ### 4. Reactive Monitoring & Independent Verification
 - **Short/interactive tasks:** Collect completions with `hc wait --children all`, `hc wait --children any`, or `hc wait <name>` (re-wait on `180s` check-in timeouts; never use shell `sleep` loops).

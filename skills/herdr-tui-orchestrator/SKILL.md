@@ -52,9 +52,9 @@ Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane (`tab create` or
 
   # 3. Wait until the agent settles to idle, then submit the prompt atomically
   herdr agent wait <type>-<topic> --state idle
-  herdr agent prompt <type>-<topic> "Use the herdr-tui-worker skill (~/.agents/skills/herdr-tui-worker/SKILL.md). Execute <state-dir>/tasks/<type>-<topic>.md. No subagents."
+  herdr agent prompt <type>-<topic> "Use the herdr-tui-worker skill (<skills-dir>/herdr-tui-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute <state-dir>/tasks/<type>-<topic>.md. No subagents."
   ```
-  *(Pass `--machine "<label-or-id>"` before subcommands when targeting a saved remote SSH machine, and inline `herdr-tui-worker` rules if the remote host lacks the skill file.)*
+  *(Pass the exact installed path to `herdr-tui-worker/SKILL.md`. Pass `--machine "<label-or-id>"` before subcommands when targeting a saved remote SSH machine, and inline `herdr-tui-worker` rules if the remote host lacks the skill file.)*
 
 ### 4. Wait, Read, Steer & Independently Verify
 - **Short/interactive tasks:** Wait for state transitions via `herdr agent wait <type>-<topic>` (never poll in shell `sleep` loops). Inspect agent state and output via `herdr agent get <type>-<topic>`, `herdr agent read <type>-<topic> --source recent`, or `herdr pane read "<pane_id>" --lines 80` (use `herdr agent explain <name>` to debug state detection).
