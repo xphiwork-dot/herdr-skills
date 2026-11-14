@@ -155,6 +155,50 @@ Add to `~/.pi/agent/settings.json`:
 
 ---
 
+## Quickstart & Usage Examples
+
+### 1. Start Your Orchestrator Agent Inside Herdr
+
+Launch your preferred CLI coding agent (`agy`, `claude`, `pi`, `codex`, or `opencode`) **inside a Herdr terminal** (Herdr App/Core or Herdr TUI), then invoke the orchestrator skill explicitly in your prompt:
+
+- **Herdr App / `hc` (`$HC_TERMINAL_ID`):** start your prompt with `/herdr-orchestrator ...` (or ask to *"orchestrate with herdr"*).
+- **Herdr TUI (`$HERDR_PANE_ID`):** start your prompt with `/herdr-tui-orchestrator ...`.
+
+---
+
+### 2. Example Prompts
+
+#### Single Worker PR Task (`pi` / `claude` / `codex` worker)
+
+```text
+/herdr-orchestrator update README.md to reflect the current main branch and open a PR using a pi deepseek worker
+```
+
+What happens automatically:
+1. **Preflight & isolation:** Checks `git ls-remote` / `gh auth status` and creates an isolated worktree (`../repo-update-readme` on branch `docs/update-readme`) plus a handoff spec in `~/.local/state/herdr/<project>/tasks/`.
+2. **Spawn & wait:** Launches the worker in background (`hc run --bg --name docs-update-readme ...` or `herdr tab create --no-focus` + `herdr agent start`), waits until `idle`, and sends the task with `herdr-worker`.
+3. **Sync, verify & PR:** The worker runs `git fetch origin`, resolves any conflicts against `origin/main` inside its worktree, verifies checks, pushes, and opens the PR via `gh pr create`.
+4. **Stay warm:** The orchestrator verifies the diff/PR and leaves the worker `idle` for follow-ups.
+
+#### Parallel Multi-Worker Tasks (Separate Worktrees & PRs)
+
+```text
+/herdr-orchestrator use two claude workers in parallel: one to fix the login timeout bug, and one to add integration tests
+```
+
+Each worker receives its own isolated `git worktree`, branch (`fix/login-timeout`, `test/login-integration`), and independent PR—never sharing a working directory or auto-merging into `main`.
+
+#### Follow-Up Revisions, Screenshots & Cleanup
+
+```text
+Send the attached screenshot to docs-update-readme so it fixes the overflowing table, then clean up the worker after I merge the PR.
+```
+
+- **Screenshots:** The orchestrator copies user-shared images into `~/.local/state/herdr/<project>/assets/` (never into the git repo) and points the warm worker to that path.
+- **Cleanup:** Once you confirm, the orchestrator removes the `hc` terminal / `herdr` tab, deletes the isolated worktree (`git worktree remove` + `prune`), and cleans up the XDG state files.
+
+---
+
 ## Key Workflow Guarantees
 
 - **Strict Orchestrator-Only Role:** The orchestrator never writes feature code or edits deliverables directly; even small follow-up tweaks are delegated to warm workers so orchestrator context stays lean and responsive.
