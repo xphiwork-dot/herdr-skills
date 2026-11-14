@@ -1,0 +1,25 @@
+{
+  "name": "herdr-skills",
+  "version": "1.0.0",
+  "description": "Multi-agent orchestration and worker skills for Herdr (both herdr-core/herdr-app and Herdr TUI variants). Compatible with Claude Code, Antigravity, Pi, Codex, OpenCode, and Cursor.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xphiwork-dot/herdr-skills.git"
+  },
+  "keywords": [
+    "agent-skills",
+    "pi-package",
+    "herdr",
+    "herdr-core",
+    "herdr-app",
+    "herdr-tui",
+    "multi-agent",
+    "orchestrator"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}

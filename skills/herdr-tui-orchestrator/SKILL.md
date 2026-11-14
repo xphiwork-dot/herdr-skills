@@ -1,0 +1,70 @@
+---
+name: herdr-tui-orchestrator
+description: >-
+  Coordinate coding agents inside the Herdr TUI multiplexer (`herdr` CLI:
+  `herdr workspace`, `herdr tab`, `herdr pane`, `herdr agent`). Use only when
+  the user explicitly requests `herdr-tui-orchestrator` or asks to orchestrate
+  workers inside a Herdr TUI (`HERDR_PANE_ID`) session; never activate merely
+  because parallel work is useful.
+---
+
+# Herdr TUI Orchestrator (`herdr` CLI)
+
+Opt-in per request for the **Herdr TUI** (`herdr` multiplexer CLI — for `herdr-core` `hc` + `herdr-app`, use `herdr-orchestrator` instead).
+
+Before acting, verify this session runs inside a Herdr TUI pane:
+`test -n "${HERDR_PANE_ID:-}" && herdr agent list >/dev/null`
+If not, explain that this session is not running inside a Herdr TUI pane (`$HERDR_PANE_ID` is unset) and stop—never start, attach, or stop user sessions unprompted. Never run bare `herdr` without subcommands (opens/attaches the interactive TUI); inspect capabilities via `herdr --help` and `herdr <workspace|tab|pane|agent> --help`.
+
+## Core Workflow
+
+### 0. Orchestrator-Only Role & User Communication
+- **Never execute implementation work yourself:** Do not write feature/experiment code, edit deliverables, fix bugs, or run heavy builds/trainings in the orchestrator pane. Delegate even small follow-up edits or PR prep to an idle worker (`herdr agent prompt <name> "..."`) or spawn a dedicated worker tab/pane so your context stays lean and responsive.
+- **Use worker `<name>` with the user:** In all user-facing messages, refer to workers by their descriptive agent name (e.g. `docs-update-readme-status`), **never** raw pane IDs (e.g. `w1:p4`).
+
+### 1. Worktree Isolation, Branch Discipline & Preflight
+- **One isolated worktree + branch per worker:** Create a dedicated worktree and branch for every independent worker rather than sharing the main checkout:
+  `git worktree add ../<repo>-<slug> -b <type>/<topic> <base>`
+- **Gitignored dependencies in fresh worktrees:** `git worktree add` omits gitignored directories (`.venv`, `upstream/`, `data/`). Check if tests/scripts need them; symlink read-only shared directories (`ln -s`) or document setup in the handoff spec.
+- **No unprompted merges:** Never merge worker branches into `main` or fold separate worktrees into one catch-all branch/PR unless the user explicitly asks. Use stacked branches or ask first when tasks depend on unmerged work.
+- **Preflight shared blockers once:** Run quick read-only checks on credentials, remote access (`git ls-remote`), and `gh auth status` before spawning workers.
+
+### 2. Naming & Standardized State Directory
+- **Naming rules (`/` in git branches & tab labels, `-` in agent names):**
+  - **Git branch & TUI tab label:** `<type>/<topic>` (e.g. `docs/update-readme-status`)
+  - **Herdr agent `<name>`:** `<type>-<topic>` — `1–32` chars of `a-z 0-9 - _ .`, starting with `[a-z0-9]`, **no `/`**.
+- **State directory outside git (`${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/`):**
+  - `tasks/<worker-name>.md` — durable handoff specs (see [handoff-template.md](./references/handoff-template.md)).
+  - `reports/<worker-name>.md` — verified worker completion summaries.
+  - `assets/<worker-name>-*.png` — user-provided screenshots/reference images. Always copy user images here (never into a git worktree) and pass the path in the handoff spec or prompt.
+  - `locks/<resource>.lock` and `logs/` — shared GPU/resource locks and detached logs.
+
+### 3. Spawn Worker Tabs/Panes & Start Tracked Agents
+Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane (`tab create` or `pane split`) and then attaches lifecycle tracking via `herdr agent start`:
+- **Unfocused tab by default (`--no-focus`):** Create a dedicated tab in the current workspace without stealing the user's focus (only use `herdr pane split "$HERDR_PANE_ID" --direction right --no-focus` when side-by-side splits are requested):
+  ```sh
+  # 1. Create an unfocused tab rooted at the isolated worktree (JSON output returns pane ID)
+  TAB_JSON=$(herdr tab create --cwd "<worktree>" --label "<type>/<topic>" --no-focus)
+  # Extract pane_id from $TAB_JSON (inspect field shape once via jq/python if needed)
+
+  # 2. Start the interactive coding agent inside that shell pane (never pass -p print mode)
+  herdr agent start <type>-<topic> --kind <claude|codex|pi|opencode> --pane "<pane_id>" -- <agent-flags>
+
+  # 3. Wait until the agent settles to idle, then submit the prompt atomically
+  herdr agent wait <type>-<topic> --state idle
+  herdr agent prompt <type>-<topic> "Use the herdr-tui-worker skill (~/.agents/skills/herdr-tui-worker/SKILL.md). Execute <state-dir>/tasks/<type>-<topic>.md. No subagents."
+  ```
+  *(Pass `--machine "<label-or-id>"` before subcommands when targeting a saved remote SSH machine, and inline `herdr-tui-worker` rules if the remote host lacks the skill file.)*
+
+### 4. Wait, Read, Steer & Independently Verify
+- **Short/interactive tasks:** Wait for state transitions via `herdr agent wait <type>-<topic>` (never poll in shell `sleep` loops). Inspect agent state and output via `herdr agent get <type>-<topic>`, `herdr agent read <type>-<topic> --source recent`, or `herdr pane read "<pane_id>" --lines 80` (use `herdr agent explain <name>` to debug state detection).
+- **Long-running builds/GPU runs & sequential pipelines:** Use worker-owned single-bash-loop milestone pushes (`herdr agent prompt <orchestrator-target>` or status logs) and `herdr agent send-keys <name> esc` mid-flight steering — follow [long-running-jobs.md](./references/long-running-jobs.md).
+- **Verify every worker claim:** Always verify `<state-dir>/reports/<worker-name>.md`, `git status --short`, `git diff <base> --stat`, test/link/row counts, and remote SHAs before reporting completion.
+
+### 5. Remote Sync, Conflict Resolution, PR Creation & Cleanup
+- **Always `git fetch origin` before any remote git or PR action:** Have the worker fetch `origin` first, check for and resolve any conflicts against `origin/<base>` cleanly inside its isolated worktree, re-run verification checks, and push.
+- **PR creation (`gh` vs. fallback):** Have the worker check `gh auth status` and `gh pr list --head <branch> --state all`:
+  - If authenticated: create (`gh pr create --base <base> --head <branch> --title "<clear title>" --body "<concise summary + verification>"`) or update an existing `OPEN` PR and report its URL + mergeability.
+  - If `gh` is unavailable or unauthenticated: push the branch and report the compare URL plus a ready-to-paste PR title and concise summary.
+- **Release compute & keep workers warm:** Immediately stop billable remote compute (`colab stop`, cloud VMs) and cancel active timers, but **leave completed worker panes/tabs open (`idle`)** so revisions can be sent instantly via `herdr agent prompt <name> "<feedback>"`.
+- **Proactive cleanup prompt:** Closing a pane/tab (`herdr pane close` / `herdr tab close`) does **not** delete git worktrees, branches, caches, or state files. When work finishes, list the completed workers, panes/tabs, worktrees, branches, and state/asset files and ask user confirmation before running `git worktree remove` + `git worktree prune`, `herdr tab close "<tab_id>"` (or `herdr pane close "<pane_id>"`), and state cleanup (never stopping `herdr server` or closing user-owned workspaces/panes).
