@@ -61,15 +61,11 @@ Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane (`tab create` or
 ### 4. Non-Blocking Monitoring ("Release-to-Idle" Across `claude`, `omp`, `codex`, `agy`)
 - **NEVER block your turn on completion waits:** Running `herdr agent wait <name>` or `herdr pane wait-output` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your pane status in `working` and **blocks the user from chatting** (only use `herdr agent wait --state idle` for the brief 1–5s startup readiness step above, never `--wait` on `herdr agent prompt`).
 - **End your turn immediately after dispatch (`idle`):** All four CLIs (`claude`, `omp`, `codex`, `agy`) wake automatically via PTY input when `herdr agent prompt` submits text while `idle`:
-  1. **Primary (Event-Driven Worker Push):** Give each worker your orchestrator agent name (or `$HERDR_PANE_ID`) in its handoff spec so it pushes completion/blocked notices via `herdr agent prompt <orchestrator-target> "<worker-name>: <summary>"` once your turn has ended (`idle`). If siblings are still `working` (`herdr agent list`), note partial progress and end your turn immediately until the rest report.
-  2. **Detached Out-of-Band Watchdog (Universal across `claude`, `omp`, `codex`, `agy` — closed FDs, `<50ms` exit):** Spawn a fully detached `nohup setsid` background shell job with closed stdin/stdout/stderr (so neither `omp` nor `codex` holds the turn open), wait politely until your orchestrator agent is `idle`, and nudge it:
+  1. **Default for Agent Workers (Event-Driven Push — NO watchdog needed):** Give each worker your orchestrator agent name (or `$HERDR_PANE_ID`) in its handoff spec so it pushes completion/blocked notices via `herdr agent prompt <orchestrator-target> "<worker-name>: <summary>"` once your turn has ended. If siblings are still `working` (`herdr agent list`), note partial progress and end your turn immediately until the rest report.
+  2. **Optional Detached Watchdog Script ([herdr-tui-watch.sh](./scripts/herdr-tui-watch.sh) — closed FDs, `<50ms` exit):** When guarding silent targets or plain commands, run the bundled helper detached with closed stdin/stdout/stderr:
      ```sh
-     nohup setsid sh -c '
-       for w in <worker-1> <worker-2>; do herdr agent wait "$w" >/dev/null 2>&1 || true; done
-       sleep 2
-       herdr agent wait "<orchestrator-agent>" --state idle >/dev/null 2>&1 || true
-       herdr agent prompt "<orchestrator-agent>" "[watch] workers settled; check herdr agent list" >/dev/null 2>&1 || true
-     ' </dev/null >>"<state-dir>/logs/watch.log" 2>&1 &
+     nohup setsid "<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-watch.sh" \
+       "<orchestrator-agent>" "<state-dir>/logs/watch.log" <worker-1> <worker-2> </dev/null >/dev/null 2>&1 &
      ```
   3. **CLI-Native Timers (`agy` & `claude` only — never `omp` `bg_*` or `codex`):** In `agy` (`schedule`) or `claude` (`ScheduleWakeup` / `CronCreate` / `run_in_background`), you may use native out-of-turn timers that let your turn finish to `idle`. In **`omp`** and **`codex`**, use **only** Primary Push (#1) or the closed-FD `nohup setsid` Watchdog (#2).
 - **Inspect & steer when woken:** Read worker state/output via `herdr agent get <name>`, `herdr agent read <name> --source recent`, or `herdr pane read "<pane_id>" --lines 80` (`herdr agent explain <name>` to debug state detection). For long-running builds/GPU jobs and `esc` mid-flight steering, follow [long-running-jobs.md](./references/long-running-jobs.md).

@@ -223,9 +223,9 @@ Send the attached screenshot to docs-update-readme so it fixes the overflowing t
 ```text
 herdr-skills/
 ├── skills/
-│   ├── herdr-orchestrator/          # hc + herdr-app orchestrator (+ references/)
+│   ├── herdr-orchestrator/          # hc + herdr-app orchestrator (+ scripts/herdr-watch.sh & references/)
 │   ├── herdr-worker/                # hc + herdr-app worker (+ references/)
-│   ├── herdr-tui-orchestrator/      # herdr TUI orchestrator (+ references/)
+│   ├── herdr-tui-orchestrator/      # herdr TUI orchestrator (+ scripts/herdr-tui-watch.sh & references/)
 │   └── herdr-tui-worker/            # herdr TUI worker (+ references/)
 ├── .claude-plugin/plugin.json       # Claude Code plugin manifest
 ├── package.json                     # Pi & skills package manifest
