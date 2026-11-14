@@ -7,6 +7,7 @@ PROJECT_DIR="$PWD"
 AGENT="default"
 CUSTOM_DEST=""
 MODE="copy"
+WITH_DEPS="prompt"
 
 usage() {
   cat <<'EOF'
@@ -29,6 +30,8 @@ Options:
   --codex                   Target Codex (~/.codex/skills or <project>/.codex/skills)
   --pi                      Target Pi (~/.pi/agent/skills or <project>/.pi/skills)
   --dest <dir>              Explicit destination skills directory (overrides scope/agent)
+  --with-deps               Automatically export hc / herdr-app / herdr --skill into dest
+  --no-deps                 Skip dependency check / --skill export prompt
   --symlink                 Symlink skill folders instead of copying
   -h, --help                Show this help message
 EOF
@@ -72,6 +75,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --pi)
       AGENT="pi"
+      shift
+      ;;
+    --with-deps)
+      WITH_DEPS="yes"
+      shift
+      ;;
+    --no-deps)
+      WITH_DEPS="no"
       shift
       ;;
     --symlink)
@@ -137,3 +148,63 @@ for skill in "${SKILLS[@]}"; do
 done
 
 echo "Done. Installed ${#SKILLS[@]} skill(s) (${SCOPE}) into ${DEST}."
+
+# Check Herdr CLI & built-in --skill dependencies
+export_cli_skill() {
+  local bin="$1"
+  local skill_name="$2"
+  local desc="$3"
+  local out_dir="${DEST}/${skill_name}"
+  local out_file="${out_dir}/SKILL.md"
+  mkdir -p "$out_dir"
+  {
+    printf -- "---\nname: %s\ndescription: >-\n  %s\n---\n\n" "$skill_name" "$desc"
+    "$bin" --skill
+  } > "$out_file"
+  echo "Exported ${bin} --skill -> ${out_file}"
+}
+
+check_cli_dep() {
+  local bin="$1"
+  local skill_name="$2"
+  local desc="$3"
+  local install_cmd="$4"
+
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    echo ""
+    echo "[!] Missing dependency: '${bin}' is not installed."
+    echo "    Install it first: ${install_cmd}"
+    echo "    Then export its built-in skill with: ${bin} --skill"
+    return
+  fi
+
+  if [[ ! -f "${DEST}/${skill_name}/SKILL.md" ]]; then
+    if [[ "$WITH_DEPS" == "yes" ]]; then
+      export_cli_skill "$bin" "$skill_name" "$desc"
+    elif [[ "$WITH_DEPS" == "prompt" && -t 0 ]]; then
+      echo ""
+      read -r -p "[?] '${bin}' is installed, but '${DEST}/${skill_name}/SKILL.md' is missing. Export '${bin} --skill' there now? [y/N] " ans
+      if [[ "$ans" =~ ^[Yy]$ ]]; then
+        export_cli_skill "$bin" "$skill_name" "$desc"
+      fi
+    elif [[ "$WITH_DEPS" == "prompt" ]]; then
+      echo "[i] Tip: '${DEST}/${skill_name}/SKILL.md' not found. Run with --with-deps (or '${bin} --skill') to install the ${bin} manual skill."
+    fi
+  fi
+}
+
+if [[ "$WITH_DEPS" != "no" ]]; then
+  if [[ "$VARIANT" == "app" || "$VARIANT" == "all" ]]; then
+    check_cli_dep "hc" "hc" \
+      "Run, inspect, message, wait on, and orchestrate persistent terminals and coding agents with herdr-core (hc)." \
+      "curl -fsSL https://releases.herdr.dev/core/install.sh | sh"
+    check_cli_dep "herdr-app" "herdr-app" \
+      "Drive and customize the Herdr desktop app window (herdr-app): spaces, tabs, panes, screenshots, and mods." \
+      "curl -fsSL https://releases.herdr.dev/app/install.sh | sh"
+  fi
+  if [[ "$VARIANT" == "tui" || "$VARIANT" == "all" ]]; then
+    check_cli_dep "herdr" "herdr" \
+      "Operate and automate the Herdr TUI terminal multiplexer (herdr workspace, tab, pane, and agent commands)." \
+      "curl -fsSL https://herdr.dev/install.sh | sh"
+  fi
+fi

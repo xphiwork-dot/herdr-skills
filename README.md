@@ -137,7 +137,12 @@ cd herdr-skills
 
 # Symlink for live skill edits (either --global or --project)
 ./install.sh --variant all --agy --symlink
+
+# Automatically export built-in CLI dependency skills (hc --skill, herdr-app --skill, herdr --skill)
+./install.sh --variant app --agy --with-deps
 ```
+
+> **Dependency check:** `install.sh` automatically checks for `hc` / `herdr-app` (for `app`) and `herdr` (for `tui`). If a binary is missing, it prints the install command; if installed but its `--skill` file is missing from the destination, it prompts to export it (or does so automatically with `--with-deps`, or skips with `--no-deps`).
 
 > **Antigravity CLI `~/.gemini/config/skills.json` alternative:** `agy` CLI also discovers paths listed in `~/.gemini/config/skills.json` (e.g. `{ "entries": [{ "path": "/path/to/herdr-skills/skills" }] }`).
 
