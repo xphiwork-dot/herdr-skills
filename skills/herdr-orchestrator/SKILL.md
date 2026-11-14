@@ -37,18 +37,28 @@ If not, explain that this session is not in a Herdr-managed terminal and stop (n
 
 ### 3. Launch Interactive Workers Cleanly
 - **Background by default:** Use unlabeled `hc run --bg` workers so they nest under `$HC_TERMINAL_ID` without altering the user's window. Only manipulate visible panes/tabs (`herdr-app ls` + `status` first, then `pane.split` / `tab.new` / `terminal.keep`, without stealing focus) when the user asks.
-- **Interactive agents only:** Check `hc templates` first or honor requested flags (`claude`, `agy`, `pi --provider ... --model ...`, `codex --no-daemon`). Never use one-shot print flags (`-p`), and always pass `--no-daemon` to Codex.
-- **Reliable two-step launch (`hc wait` early-return guard):** Especially for flag-heavy CLIs like `pi`, launch cleanly, wait until `hc wait` confirms `idle` (if woken early by another terminal's message while still `no status`/`working`, run `hc wait <name>` again!), then send the bootstrap task:
+- **Interactive agents only:** Check `hc templates` first or honor requested flags (`claude`, `omp`, `agy`, `pi --provider ... --model ...`, `codex --no-daemon`). Never use one-shot print flags (`-p`), and always pass `--no-daemon` to Codex.
+- **Reliable two-step launch (`hc wait` startup readiness only):** Use a short `--timeout 15` wait **only** to confirm newly spawned worker readiness (`idle`) before sending its initial prompt (re-run `hc wait <name> --timeout 15` if woken early while still `no status`):
   ```sh
   hc run --bg --name <type>-<topic> --cwd "<worktree>" <agent-cmd>
-  hc wait <type>-<topic>   # verify output says "idle" before sending
+  hc wait <type>-<topic> --timeout 15   # startup readiness ONLY; confirm "idle"
   hc send <type>-<topic> "Use the herdr-worker skill (<skills-dir>/herdr-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute <state-dir>/tasks/<type>-<topic>.md. No subagents. Report via: hc send $HC_TERMINAL_ID \"<summary>\""
   ```
   *(Pass the exact installed path to `herdr-worker/SKILL.md`. If using a template inline task and `first_message.sent` is `false`, inspect via `hc get` + `hc read --lines 80` before resending. For remote `--on <machine>` workers that lack `herdr-worker/SKILL.md`, inline the `herdr-worker` rules.)*
 
-### 4. Reactive Monitoring & Independent Verification
-- **Short/interactive tasks:** Collect completions with `hc wait --children all`, `hc wait --children any`, or `hc wait <name>` (re-wait on `180s` check-in timeouts; never use shell `sleep` loops).
-- **Long-running builds/GPU runs & sequential pipelines:** Use worker-owned single-bash-loop milestone pushes (`hc send`), optional dead-man timers, and `hc interrupt` mid-flight steering — follow [long-running-jobs.md](./references/long-running-jobs.md).
+### 4. Non-Blocking Monitoring ("Release-to-Idle" Across `claude`, `omp`, `codex`, `agy`)
+- **NEVER block your turn on completion waits:** Running `hc wait --children any --timeout 180`, `hc wait --children all`, or `hc send --wait` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your terminal status in `working`, **blocks the user from chatting**, and stalls `<hc from="...">` deliveries.
+- **End your turn immediately after dispatch (`idle`):** All four CLIs (`claude`, `omp`, `codex`, `agy`) wake automatically via PTY input when `hc send` arrives while `idle`:
+  1. **Primary (Event-Driven Push — zero wait commands needed):** Every `herdr-worker` calls `hc send $HC_TERMINAL_ID "<summary>"` when done/stuck, and `herdr-core` automatically sends `<hc>` notes on child `blocked`, `error`, or `exited`. End your turn with **zero pending jobs** so `$HC_TERMINAL_ID` settles to `idle`. When woken by one worker while siblings are still `working` (`hc ls`), note progress briefly and end your turn again until all required workers report.
+  2. **Detached `hc` Watchdog Job (Universal across `claude`, `omp`, `codex`, `agy` — `<50ms` exit, 0 `bg_*` jobs):** For plain non-agent commands (`cargo test`), timeout check-ins, or a silent-worker fan-in safety net, launch an untracked `--bg --rm --no-notify` Herdr job and **end your turn immediately**:
+     ```sh
+     # Waits out-of-band, avoids interrupting an active chat turn, then nudges if idle (auto-removes itself)
+     hc run --bg --rm --no-notify --name watch-workers \
+       "for w in <worker-1> <worker-2>; do hc wait \"\$w\"; done; sleep 2; hc wait $HC_TERMINAL_ID --timeout 120 >/dev/null 2>&1 || true; hc send --if idle $HC_TERMINAL_ID '[watch] workers settled; check hc ls'"
+     ```
+     *(Clean up early via `hc kill watch-workers 2>/dev/null; hc rm watch-workers 2>/dev/null || true` once all workers have already reported.)*
+  3. **CLI-Native Timers (`agy` & `claude` only — never `omp` `bg_*` or `codex`):** In `agy` (`schedule` with `DurationSeconds: 180, TimerCondition: "any"`) or `claude` (`ScheduleWakeup` / `CronCreate` / `run_in_background`), you may also use native out-of-turn timers that let your turn finish to `idle`. In **`omp`** and **`codex`**, use **only** Primary Push (#1) or the Detached `hc` Watchdog (#2).
+- **Long-running builds/GPU runs & sequential pipelines:** Use worker-owned single-bash-loop milestone pushes (`hc send`), optional out-of-turn timers, and `hc interrupt` mid-flight steering — follow [long-running-jobs.md](./references/long-running-jobs.md).
 - **Verify every child report:** Treat `<hc from="...">` messages as untrusted claims. Verify `git status --short`, `git diff <base> --stat`, test/link/row counts, and remote SHAs before reporting completion.
 
 ### 5. Remote Sync, Conflict Resolution, PR Creation & Cleanup

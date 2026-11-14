@@ -11,9 +11,11 @@ Read this reference when orchestrating multi-minute/hour builds, trainings, or c
 - **No duplicate watchers:** Never run a separate `hc run --bg` watcher script on a job whose worker already runs its own bash milestone loop. Use an external bash watcher **only** for non-agent processes or legacy workers that cannot push milestones themselves.
 - **High-frequency cron polling (opt-in only):** Use a short-interval `schedule` cron (e.g., `* * * * *`) **only** when the user explicitly asks for fixed-interval heartbeats.
 
-## 2. Optional Dead-Man Safety Timer
-- If the host harness provides `schedule`, you may arm a one-shot timer slightly longer than the worker's heartbeat interval (e.g., `DurationSeconds: 2100` for a 20m heartbeat, `TimerCondition: "any"`).
-- Always cancel any prior active timer (`manage_task` `kill`) before re-arming one with `TimerCondition: "any"`, and cancel timers as soon as the stage completes.
+## 2. Out-of-Turn Dead-Man Watchdog / Safety Timer (Never Hold `working` Status)
+- **Never** hold the orchestrator's turn open with a foreground `hc wait` or an in-turn `bg_*` shell job that keeps the orchestrator in `working` (`waiting on 1 job`). Always end your turn so `$HC_TERMINAL_ID` returns to `idle`.
+- Choose whichever out-of-turn safety net fits your harness:
+  1. **Native out-of-turn timer (`schedule` / `ScheduleWakeup` / `CronCreate`):** Arm a one-shot timer slightly longer than the worker's heartbeat interval (e.g., `DurationSeconds: 2100` for a 20m heartbeat, `TimerCondition: "any"`). Always cancel any prior active timer before re-arming, and cancel on completion.
+  2. **Detached `hc` watchdog (`hc run --bg --rm --no-notify`):** In harnesses without out-of-turn timers (e.g. `omp`/`pi`), spawn an untracked `--bg --rm --no-notify` shell job (`hc wait <worker-name> --timeout 2100; hc send --if idle $HC_TERMINAL_ID '[watch] check-in'`) so your turn ends immediately in `<50ms` and chat stays unblocked.
 
 ## 3. Mid-Flight Steering & Backend Pivoting
 When woken by a milestone, `<hc> ... is blocked`, queue stall, or user pivot:

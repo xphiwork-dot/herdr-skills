@@ -5,7 +5,7 @@ Production-tested **orchestrator** and **worker** skills for coordinating multi-
 1. **Herdr Core + Herdr App (`hc` + `herdr-app`)** — `herdr-orchestrator` & `herdr-worker`
 2. **Herdr TUI (`herdr` terminal multiplexer)** — `herdr-tui-orchestrator` & `herdr-tui-worker`
 
-Works across terminal/CLI coding agents that run inside Herdr panes/terminals: **Antigravity CLI (`agy`)**, **Claude Code (`claude`)**, **Pi (`pi`)**, **Codex (`codex`)**, and **OpenCode** *(note: desktop GUI IDEs like Antigravity IDE or Cursor do not run inside Herdr `$HC_TERMINAL_ID` / `$HERDR_PANE_ID` terminals)*.
+Works across the four primary terminal/CLI coding agents inside Herdr: **Claude Code (`claude`)**, **Oh My Pi (`omp` / `pi`)**, **Codex (`codex --no-daemon`)**, and **Antigravity CLI (`agy`)** *(note: desktop GUI IDEs like Antigravity IDE or Cursor do not run inside Herdr `$HC_TERMINAL_ID` / `$HERDR_PANE_ID` terminals)*.
 
 ---
 
@@ -29,7 +29,7 @@ Herdr has two distinct CLI surfaces depending on whether you run the **`herdr-co
 | **Session env var** | `$HC_TERMINAL_ID` (e.g. `t19`) | `$HERDR_PANE_ID` (e.g. `w1:p1`), `$HERDR_WORKSPACE_ID` |
 | **Preflight check** | `test -n "${HC_TERMINAL_ID:-}" && hc ls >/dev/null` | `test -n "${HERDR_PANE_ID:-}" && herdr agent list >/dev/null` |
 | **Spawn background worker** | `hc run --bg --name <type>-<topic> --cwd "<worktree>" <cmd>` | `herdr tab create --cwd "<worktree>" --label "<type>/<topic>" --no-focus` + `herdr agent start <name> --kind <kind> --pane "<pane_id>"` |
-| **Wait for readiness / done** | `hc wait <name>` / `hc wait --children all` | `herdr agent wait <name> --state idle` |
+| **Wait / monitor (non-blocking)** | Startup only: `hc wait <name> --timeout 15`; completion: end turn (`idle`) + `<hc>` push or detached `hc run --bg --rm --no-notify` watchdog / scheduled timer | Startup only: `herdr agent wait <name> --state idle`; completion: end turn (`idle`) + `herdr agent prompt` push or detached `nohup setsid` watchdog / timer |
 | **Send task / revision** | `hc send <name> "<prompt>"` | `herdr agent prompt <name> "<prompt>"` |
 | **Read output** | `hc read --lines 80 <name>` / `hc get <name>` | `herdr agent read <name> --source recent` / `herdr pane read "<pane_id>" --lines 80` |
 | **Interrupt mid-turn** | `hc interrupt <name>` | `herdr agent send-keys <name> esc` |
@@ -123,14 +123,15 @@ cd herdr-skills
 
 # Global install (--global is the default)
 ./install.sh --variant app --agy         # ~/.gemini/antigravity-cli/skills (Antigravity CLI)
-./install.sh --variant app               # ~/.agents/skills (universal / OpenCode)
 ./install.sh --variant app --claude      # ~/.claude/skills (Claude Code)
+./install.sh --variant app --omp         # ~/.omp/agent/skills (Oh My Pi / OMP)
 ./install.sh --variant app --codex       # ~/.codex/skills (Codex)
 ./install.sh --variant app --pi          # ~/.pi/agent/skills (Pi)
+./install.sh --variant app               # ~/.agents/skills (universal shared path)
 ./install.sh --variant tui --agy         # Herdr TUI variant
 
 # Project-level install (--project [dir], defaults to $PWD)
-./install.sh --variant app --project /path/to/repo           # <repo>/.agents/skills (agy CLI / OpenCode)
+./install.sh --variant app --project /path/to/repo           # <repo>/.agents/skills (agy / omp)
 ./install.sh --variant app --project /path/to/repo --claude  # <repo>/.claude/skills
 ./install.sh --variant app --project /path/to/repo --codex   # <repo>/.codex/skills
 ./install.sh --variant app --project /path/to/repo --pi      # <repo>/.pi/skills
@@ -211,6 +212,7 @@ Send the attached screenshot to docs-update-readme so it fixes the overflowing t
 - **Per-Worker `git worktree` Isolation:** Every concurrent worker gets its own `git worktree` and branch—with preflight checks for gitignored dependencies (`.venv`, `upstream/`, `data/`) and zero unprompted merges into `main`.
 - **Clean XDG State & Screenshot Staging:** Handoff specs (`tasks/`), reports (`reports/`), shared GPU locks (`locks/`), and user-uploaded screenshots (`assets/`) live under `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/`—keeping every git worktree clean.
 - **Remote Sync, Conflict Resolution & PR Creation:** Workers always `git fetch origin` before any remote action, resolve conflicts against `origin/<base>` inside their isolated worktree, re-verify gates, and create/update PRs directly via `gh pr create` (with fallback compare URL + ready-to-paste title & summary if `gh` is unauthenticated).
+- **Release-to-Idle Non-Blocking Monitoring (Chat Stays Free):** Orchestrators **never** run `hc wait --children ...` or `herdr agent wait` as blocking foreground commands (or turn-holding `bg_*` jobs that trap `omp`/`pi` in `working` status). After dispatching tasks, the orchestrator immediately ends its turn (`idle`) and wakes reactively via worker `hc send` / `herdr agent prompt` pushes, untracked `hc run --bg --rm --no-notify` / `nohup setsid` watchdog jobs, or out-of-turn scheduled timers.
 - **Zero-LLM-Polling Long Job Supervision:** Progressive-disclosure `references/` provide detached `nohup setsid` + single blocking bash monitor recipes for long builds and cloud/GPU runs.
 - **Warm Workers & Explicit Cleanup:** Completed workers remain parked (`idle`, zero token cost) for instant follow-up revisions until the user confirms full worktree + terminal + state cleanup.
 

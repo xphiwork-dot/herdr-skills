@@ -27,6 +27,7 @@ Options:
   --agy, --antigravity      Target Antigravity CLI (~/.gemini/antigravity-cli/skills globally,
                             or <project>/.agents/skills at project level)
   --claude                  Target Claude Code (~/.claude/skills or <project>/.claude/skills)
+  --omp                     Target Oh My Pi / OMP (~/.omp/agent/skills or <project>/.agents/skills)
   --codex                   Target Codex (~/.codex/skills or <project>/.codex/skills)
   --pi                      Target Pi (~/.pi/agent/skills or <project>/.pi/skills)
   --dest <dir>              Explicit destination skills directory (overrides scope/agent)
@@ -67,6 +68,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --claude)
       AGENT="claude"
+      shift
+      ;;
+    --omp)
+      AGENT="omp"
       shift
       ;;
     --codex)
@@ -117,6 +122,7 @@ elif [[ "$SCOPE" == "global" ]]; then
   case "$AGENT" in
     agy) DEST="${HOME}/.gemini/antigravity-cli/skills" ;;
     claude) DEST="${HOME}/.claude/skills" ;;
+    omp) DEST="${HOME}/.omp/agent/skills" ;;
     codex) DEST="${HOME}/.codex/skills" ;;
     pi) DEST="${HOME}/.pi/agent/skills" ;;
     default) DEST="${HOME}/.agents/skills" ;;
@@ -127,7 +133,7 @@ else
     claude) DEST="${PROJECT_DIR}/.claude/skills" ;;
     codex) DEST="${PROJECT_DIR}/.codex/skills" ;;
     pi) DEST="${PROJECT_DIR}/.pi/skills" ;;
-    agy|default) DEST="${PROJECT_DIR}/.agents/skills" ;;
+    agy|omp|default) DEST="${PROJECT_DIR}/.agents/skills" ;;
   esac
 fi
 

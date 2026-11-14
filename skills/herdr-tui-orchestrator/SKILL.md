@@ -50,15 +50,27 @@ Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane (`tab create` or
   # 2. Start the interactive coding agent inside that shell pane (never pass -p print mode)
   herdr agent start <type>-<topic> --kind <claude|codex|pi|opencode> --pane "<pane_id>" -- <agent-flags>
 
-  # 3. Wait until the agent settles to idle, then submit the prompt atomically
+  # 3. Wait briefly ONLY for startup readiness (idle), then submit the prompt atomically
   herdr agent wait <type>-<topic> --state idle
   herdr agent prompt <type>-<topic> "Use the herdr-tui-worker skill (<skills-dir>/herdr-tui-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute <state-dir>/tasks/<type>-<topic>.md. No subagents."
   ```
   *(Pass the exact installed path to `herdr-tui-worker/SKILL.md`. Pass `--machine "<label-or-id>"` before subcommands when targeting a saved remote SSH machine, and inline `herdr-tui-worker` rules if the remote host lacks the skill file.)*
 
-### 4. Wait, Read, Steer & Independently Verify
-- **Short/interactive tasks:** Wait for state transitions via `herdr agent wait <type>-<topic>` (never poll in shell `sleep` loops). Inspect agent state and output via `herdr agent get <type>-<topic>`, `herdr agent read <type>-<topic> --source recent`, or `herdr pane read "<pane_id>" --lines 80` (use `herdr agent explain <name>` to debug state detection).
-- **Long-running builds/GPU runs & sequential pipelines:** Use worker-owned single-bash-loop milestone pushes (`herdr agent prompt <orchestrator-target>` or status logs) and `herdr agent send-keys <name> esc` mid-flight steering — follow [long-running-jobs.md](./references/long-running-jobs.md).
+### 4. Non-Blocking Monitoring ("Release-to-Idle" Across `claude`, `omp`, `codex`, `agy`)
+- **NEVER block your turn on completion waits:** Running `herdr agent wait <name>` or `herdr pane wait-output` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your pane status in `working` and **blocks the user from chatting** (only use `herdr agent wait --state idle` for the brief 1–5s startup readiness step above, never `--wait` on `herdr agent prompt`).
+- **End your turn immediately after dispatch (`idle`):** All four CLIs (`claude`, `omp`, `codex`, `agy`) wake automatically via PTY input when `herdr agent prompt` submits text while `idle`:
+  1. **Primary (Event-Driven Worker Push):** Give each worker your orchestrator agent name (or `$HERDR_PANE_ID`) in its handoff spec so it pushes completion/blocked notices via `herdr agent prompt <orchestrator-target> "<worker-name>: <summary>"` once your turn has ended (`idle`). If siblings are still `working` (`herdr agent list`), note partial progress and end your turn immediately until the rest report.
+  2. **Detached Out-of-Band Watchdog (Universal across `claude`, `omp`, `codex`, `agy` — closed FDs, `<50ms` exit):** Spawn a fully detached `nohup setsid` background shell job with closed stdin/stdout/stderr (so neither `omp` nor `codex` holds the turn open), wait politely until your orchestrator agent is `idle`, and nudge it:
+     ```sh
+     nohup setsid sh -c '
+       for w in <worker-1> <worker-2>; do herdr agent wait "$w" >/dev/null 2>&1 || true; done
+       sleep 2
+       herdr agent wait "<orchestrator-agent>" --state idle >/dev/null 2>&1 || true
+       herdr agent prompt "<orchestrator-agent>" "[watch] workers settled; check herdr agent list" >/dev/null 2>&1 || true
+     ' </dev/null >>"<state-dir>/logs/watch.log" 2>&1 &
+     ```
+  3. **CLI-Native Timers (`agy` & `claude` only — never `omp` `bg_*` or `codex`):** In `agy` (`schedule`) or `claude` (`ScheduleWakeup` / `CronCreate` / `run_in_background`), you may use native out-of-turn timers that let your turn finish to `idle`. In **`omp`** and **`codex`**, use **only** Primary Push (#1) or the closed-FD `nohup setsid` Watchdog (#2).
+- **Inspect & steer when woken:** Read worker state/output via `herdr agent get <name>`, `herdr agent read <name> --source recent`, or `herdr pane read "<pane_id>" --lines 80` (`herdr agent explain <name>` to debug state detection). For long-running builds/GPU jobs and `esc` mid-flight steering, follow [long-running-jobs.md](./references/long-running-jobs.md).
 - **Verify every worker claim:** Always verify `<state-dir>/reports/<worker-name>.md`, `git status --short`, `git diff <base> --stat`, test/link/row counts, and remote SHAs before reporting completion.
 
 ### 5. Remote Sync, Conflict Resolution, PR Creation & Cleanup
