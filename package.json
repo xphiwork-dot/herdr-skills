@@ -1,7 +1,7 @@
 {
   "name": "herdr-skills",
   "version": "1.0.0",
-  "description": "Multi-agent orchestration and worker skills for Herdr (both herdr-core/herdr-app and Herdr TUI variants). Compatible with Claude Code, Antigravity, Pi, Codex, OpenCode, and Cursor.",
+  "description": "Multi-agent orchestration and worker skills for Herdr (both herdr-core/herdr-app and Herdr TUI variants). For terminal coding agents: Antigravity CLI (agy), Claude Code, Pi, Codex, and OpenCode.",
   "license": "MIT",
   "repository": {
     "type": "git",
