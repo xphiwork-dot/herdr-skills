@@ -105,30 +105,37 @@ test -n "${HERDR_PANE_ID:-}" && herdr agent list
 ### Option 1: `skills` CLI (`npx skills`)
 
 ```bash
-# Install the hc + herdr-app variant
+# Global (-g) install for hc + herdr-app variant
 npx skills add xphiwork-dot/herdr-skills --skill herdr-orchestrator --skill herdr-worker -g
 
-# Or install the Herdr TUI variant
+# Or project-level install (omit -g inside your repo)
+npx skills add xphiwork-dot/herdr-skills --skill herdr-orchestrator --skill herdr-worker
+
+# Or install the Herdr TUI variant (-g for global, omit for project-level)
 npx skills add xphiwork-dot/herdr-skills --skill herdr-tui-orchestrator --skill herdr-tui-worker -g
 ```
 
-### Option 2: Local Installer Script (`agy` CLI, Claude Code, Codex, Pi)
+### Option 2: Local Installer Script (`--global` or `--project`)
 
 ```bash
 git clone https://github.com/xphiwork-dot/herdr-skills.git
 cd herdr-skills
 
-# Antigravity CLI (installs into ~/.gemini/antigravity-cli/skills)
-./install.sh --variant app --agy
-./install.sh --variant tui --agy         # or Herdr TUI variant
+# Global install (--global is the default)
+./install.sh --variant app --agy         # ~/.gemini/antigravity-cli/skills (Antigravity CLI)
+./install.sh --variant app               # ~/.agents/skills (universal / OpenCode)
+./install.sh --variant app --claude      # ~/.claude/skills (Claude Code)
+./install.sh --variant app --codex       # ~/.codex/skills (Codex)
+./install.sh --variant app --pi          # ~/.pi/agent/skills (Pi)
+./install.sh --variant tui --agy         # Herdr TUI variant
 
-# Universal ~/.agents/skills (OpenCode, shared CLI setups, or ~/.gemini/config/skills.json)
-./install.sh --variant app
-./install.sh --variant tui
+# Project-level install (--project [dir], defaults to $PWD)
+./install.sh --variant app --project /path/to/repo           # <repo>/.agents/skills (agy CLI / OpenCode)
+./install.sh --variant app --project /path/to/repo --claude  # <repo>/.claude/skills
+./install.sh --variant app --project /path/to/repo --codex   # <repo>/.codex/skills
+./install.sh --variant app --project /path/to/repo --pi      # <repo>/.pi/skills
 
-# Target Claude Code (~/.claude/skills), Codex (~/.codex/skills), Pi (~/.pi/agent/skills), or symlink
-./install.sh --variant app --claude
-./install.sh --variant app --codex
+# Symlink for live skill edits (either --global or --project)
 ./install.sh --variant all --agy --symlink
 ```
 
