@@ -15,8 +15,10 @@ If not, explain that this session is not in a Herdr-managed terminal and stop (n
 
 ## Core Workflow
 
-### 0. Orchestrator-Only Role & User Communication
-- **Never execute implementation work yourself:** Do not write feature/experiment code, edit deliverables, fix bugs, or run heavy builds/trainings in the orchestrator session. Delegate even small follow-up edits or PR prep to an idle worker (`hc send <name> ...`) or a new worker (`hc run --bg ...`) so your context stays lean and responsive.
+### 0. Pragmatic Orchestrator Role & User Communication
+- **Delegate substantive & worker-owned work; handle quick/meta tasks directly:**
+  - **Delegate to workers:** Multi-step feature/experiment code, heavy builds/test suites/trainings, parallel workstreams, and follow-up edits inside an existing worker's isolated worktree/branch (`hc send <name> ...`) so your context stays lean and you never collide with a `working` agent.
+  - **Do directly yourself (don't spawn a worker for 5-second chores):** Orchestration/skill/tooling setup, git/worktree/PR housekeeping, quick read-only checks, tiny standalone config/doc tweaks when no worker owns that branch, and **anything the user explicitly asks you to do directly**.
 - **Use worker `--name` with the user:** In all user-facing messages, refer to workers by their descriptive `hc` terminal name (e.g. `docs-update-readme-status`), **never** bare terminal IDs (e.g. `t25`).
 
 ### 1. Worktree Isolation, Branch Discipline & Preflight

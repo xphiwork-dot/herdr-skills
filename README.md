@@ -207,7 +207,7 @@ Send the attached screenshot to docs-update-readme so it fixes the overflowing t
 
 ## Key Workflow Guarantees
 
-- **Strict Orchestrator-Only Role:** The orchestrator never writes feature code or edits deliverables directly; even small follow-up tweaks are delegated to warm workers so orchestrator context stays lean and responsive.
+- **Pragmatic Orchestrator Role:** Delegates substantive code, heavy builds/trainings, parallel tasks, and edits on worker-owned branches—while handling quick 5-second setup/config/housekeeping chores (or anything the user asks to do directly) without bureaucratic overhead.
 - **Human-Readable Worker Naming:** Git branches use `<type>/<topic>` (`docs/update-readme-status`), while `hc` / `herdr` agent names use valid hyphenated slugs `<type>-<topic>` (`1–32` chars, no `/`). User-facing updates always use the worker name rather than raw terminal/pane IDs.
 - **Per-Worker `git worktree` Isolation:** Every concurrent worker gets its own `git worktree` and branch—with preflight checks for gitignored dependencies (`.venv`, `upstream/`, `data/`) and zero unprompted merges into `main`.
 - **Clean XDG State & Screenshot Staging:** Handoff specs (`tasks/`), reports (`reports/`), shared GPU locks (`locks/`), and user-uploaded screenshots (`assets/`) live under `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/`—keeping every git worktree clean.
