@@ -7,7 +7,7 @@ Save each worker's durable spec to `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/
 
 - **Worker Agent Name (`herdr`):** `<type>-<topic>` (<= 32 chars, no `/`)
 - **Agent Kind & Flags:** `<e.g., --kind pi -- --provider opencode-go --model deepseek-v4.1-flash>`
-- **Worktree:** `<abs-path-to-worktree>`
+- **Worktree:** `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/worktrees/<worker-name>`
 - **Branch:** `<type>/<topic>` (branched from `<base>` at `<sha>`)
 - **Orchestrator Pane / Agent:** `<$HERDR_PANE_ID or orchestrator agent name>`
 - **Report File:** `<state-dir>/reports/<worker-name>.md`
@@ -16,8 +16,8 @@ Save each worker's durable spec to `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/
 <1-3 sentences stating what the worker owns and what "done" looks like.>
 
 ## Scope & Boundaries
-- **Owned files/dirs:** `<exact paths>`
-- **Shared/gitignored dependencies:** `<e.g., symlinked .venv / upstream / data, or lockfiles under state dir>`
+- **Owned files/dirs:** `<exact paths inside worktree>`
+- **Shared/gitignored dependencies:** `<e.g., read-only symlinked .venv / upstream / data, or lockfiles under state dir — never symlink writable output dirs back to main checkout>`
 - **Reference assets (if any):** `<paths under ~/.local/state/herdr/<project-slug>/assets/ — read-only, never copy into git>`
 - Do **not** modify unrelated files, merge into `<base>`, or spawn sub-agents.
 

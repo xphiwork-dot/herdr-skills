@@ -12,10 +12,11 @@ Activate only when the assigning agent or user explicitly specifies `herdr-worke
 
 ## Worker Rules
 
-1. **Stay strictly within your assigned boundaries.**
-   - Read the full handoff spec (under `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/tasks/` or the path in your prompt), relevant repo docs/code, and any referenced screenshots under `.../assets/` before editing.
-   - Keep scratch files, logs, lockfiles, and reference screenshots inside `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/` (or `/tmp`)—**never** copy reference screenshots or temp artifacts into the git worktree unless explicitly instructed.
-   - Edit only your owned files in your assigned worktree. Flag missing credentials, missing gitignored dependencies, or cross-boundary changes to the orchestrator instead of guessing.
+1. **Stay strictly within your centralized worktree and assigned boundaries.**
+   - Read the full handoff spec (under `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/tasks/<worker-name>.md` or the path in your prompt), relevant repo docs/code, and any referenced screenshots under `.../assets/` before editing.
+   - Verify your working directory (`git rev-parse --show-toplevel` and `git branch --show-current`) matches your assigned centralized worktree (`${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/worktrees/<worker-name>`) and branch (`<type>/<topic>`). **Never** write to or modify the user's main checkout, sibling worktrees under `.../worktrees/`, or writable symlinks pointing back into the main checkout.
+   - Keep scratch files, logs, lockfiles, and reference screenshots inside `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/{logs,locks,assets}/` (or `/tmp`)—**never** copy reference screenshots or temp artifacts into your git worktree unless explicitly instructed.
+   - Edit only your owned files inside your assigned worktree. Flag missing credentials, missing gitignored dependencies, or cross-boundary changes to the orchestrator instead of guessing.
 
 2. **Keep your branch isolated & always check remote git updates before pushing/PRs.**
    - Commit cleanly onto your assigned branch only. **Never** switch branches, merge into `main` or another worker's branch, push to `main`, or commit secrets, caches, or weights.
