@@ -15,7 +15,7 @@ Works across the four primary terminal/CLI coding agents inside Herdr: **Claude 
 | :--- | :--- | :--- | :--- |
 | [`herdr-orchestrator`](skills/herdr-orchestrator/SKILL.md) | `hc` + `herdr-app` | Scopes worktrees, writes handoff specs, spawns/steers workers, verifies diffs/PRs | Explicit opt-in (`/herdr-orchestrator`) |
 | [`herdr-worker`](skills/herdr-worker/SKILL.md) | `hc` + `herdr-app` | Executes bounded task in an isolated worktree, syncs/opens PR, stays warm (`idle`) | Explicit in worker bootstrap prompt |
-| [`herdr-tui-orchestrator`](skills/herdr-tui-orchestrator/SKILL.md) | `herdr` TUI | Same orchestrator discipline adapted to `herdr tab/pane/agent` CLI & `$HERDR_PANE_ID` | Explicit opt-in (`/herdr-tui-orchestrator`) |
+| [`herdr-tui-orchestrator`](skills/herdr-tui-orchestrator/SKILL.md) | `herdr` TUI | Same orchestrator discipline adapted to `herdr workspace/pane/agent` CLI & `$HERDR_PANE_ID`; workers spawn as nested `└ ` child workspaces | Explicit opt-in (`/herdr-tui-orchestrator`) |
 | [`herdr-tui-worker`](skills/herdr-tui-worker/SKILL.md) | `herdr` TUI | Same worker discipline adapted to `herdr` TUI panes, reports, and `$HERDR_PANE_ID` | Explicit in worker bootstrap prompt |
 
 ---
@@ -28,13 +28,13 @@ Herdr has two distinct CLI surfaces depending on whether you run the **`herdr-co
 | :--- | :--- | :--- |
 | **Session env var** | `$HC_TERMINAL_ID` (e.g. `t19`) | `$HERDR_PANE_ID` (e.g. `w1:p1`), `$HERDR_WORKSPACE_ID` |
 | **Preflight check** | `test -n "${HC_TERMINAL_ID:-}" && hc ls >/dev/null` | `test -n "${HERDR_PANE_ID:-}" && herdr agent list >/dev/null` |
-| **Spawn background worker** | `hc run --bg --name <type>-<topic> --cwd "<worktree>" <cmd>` | `herdr tab create --cwd "<worktree>" --label "<type>/<topic>" --no-focus` + `herdr agent start <name> --kind <kind> --pane "<pane_id>"` |
-| **Wait / monitor (non-blocking)** | Startup only: `hc wait <name> --timeout 15`; completion: end turn (`idle`) + `<hc>` push or detached `hc run --bg --rm --no-notify` watchdog / scheduled timer | Startup only: `herdr agent wait <name> --state idle`; completion: end turn (`idle`) + `herdr agent prompt` push or detached `nohup setsid` watchdog / timer |
+| **Spawn background worker** | `hc run --bg --name <type>-<topic> --cwd "<worktree>" <cmd>` | `scripts/herdr-tui-spawn.sh <type>-<topic> "<worktree>"` (child workspace `└ <name>` nested under orchestrator) + `herdr agent start <name> --kind <kind> --pane "<pane_id>"` |
+| **Wait / monitor (non-blocking)** | Startup only: `hc wait <name> --timeout 15`; completion: end turn (`idle`) + `<hc>` push or detached `hc run --bg --rm --no-notify` watchdog / scheduled timer | Startup only: `herdr agent wait <name> --until idle --timeout 30000`; completion: end turn (`idle`) + `herdr agent prompt` push or detached `nohup setsid` watchdog / timer |
 | **Send task / revision** | `hc send <name> "<prompt>"` | `herdr agent prompt <name> "<prompt>"` |
 | **Read output** | `hc read --lines 80 <name>` / `hc get <name>` | `herdr agent read <name> --source recent` / `herdr pane read "<pane_id>" --lines 80` |
 | **Interrupt mid-turn** | `hc interrupt <name>` | `herdr agent send-keys <name> esc` |
 | **Window / layout control** | `herdr-app ls`, `herdr-app status`, `herdr-app do ...` | `herdr workspace ...`, `herdr tab ...`, `herdr pane ...` |
-| **Cleanup** | `hc kill <name>; hc rm <name>` | `herdr tab close "<tab_id>"` / `herdr pane close "<pane_id>"` |
+| **Cleanup** | `hc kill <name>; hc rm <name>` | `herdr workspace close "<workspace_id>"` / `herdr pane close "<pane_id>"` |
 
 ---
 
@@ -182,7 +182,7 @@ Launch your preferred CLI coding agent (`agy`, `claude`, `pi`, `codex`, or `open
 
 What happens automatically:
 1. **Preflight & centralized isolation:** Checks `git ls-remote` / `gh auth status` and creates an isolated worktree under `~/.local/state/herdr/<project>/worktrees/docs-update-readme` (on branch `docs/update-readme`) plus a handoff spec in `~/.local/state/herdr/<project>/tasks/`—keeping your parent workspace folder completely clean.
-2. **Spawn & wait:** Launches the worker in background (`hc run --bg --name docs-update-readme ...` or `herdr tab create --no-focus` + `herdr agent start`), waits until `idle` (handling any first-time workspace trust prompt), and sends the task with `herdr-worker`.
+2. **Spawn & wait:** Launches the worker in background (`hc run --bg --name docs-update-readme ...` or `herdr-tui-spawn.sh` child workspace + `herdr agent start`), waits until `idle` (handling any first-time workspace trust prompt), and sends the task with `herdr-worker`.
 3. **Sync, verify & PR:** The worker runs `git fetch origin`, resolves any conflicts against `origin/main` inside its worktree, verifies checks, pushes, and opens the PR via `gh pr create`.
 4. **Stay warm:** The orchestrator verifies the diff/PR and leaves the worker `idle` for follow-ups.
 
@@ -201,7 +201,7 @@ Send the attached screenshot to docs-update-readme so it fixes the overflowing t
 ```
 
 - **Screenshots:** The orchestrator copies user-shared images into `~/.local/state/herdr/<project>/assets/` (never into the git repo) and points the warm worker to that path.
-- **Cleanup:** Once you confirm, the orchestrator removes the `hc` terminal / `herdr` tab, deletes the isolated worktree (`git worktree remove` + `prune`), and cleans up the XDG state files.
+- **Cleanup:** Once you confirm, the orchestrator removes the `hc` terminal / `herdr` child workspace, deletes the isolated worktree (`git worktree remove` + `prune`), and cleans up the XDG state files.
 
 ---
 
@@ -224,7 +224,7 @@ herdr-skills/
 ├── skills/
 │   ├── herdr-orchestrator/          # hc + herdr-app orchestrator (+ scripts/herdr-watch.sh & references/)
 │   ├── herdr-worker/                # hc + herdr-app worker (+ references/)
-│   ├── herdr-tui-orchestrator/      # herdr TUI orchestrator (+ scripts/herdr-tui-watch.sh & references/)
+│   ├── herdr-tui-orchestrator/      # herdr TUI orchestrator (+ scripts/herdr-tui-spawn.sh, herdr-tui-watch.sh & references/)
 │   └── herdr-tui-worker/            # herdr TUI worker (+ references/)
 ├── .claude-plugin/plugin.json       # Claude Code plugin manifest
 ├── package.json                     # Pi & skills package manifest

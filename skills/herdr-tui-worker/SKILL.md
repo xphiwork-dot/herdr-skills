@@ -28,7 +28,7 @@ Activate only when the assigning agent or user explicitly specifies `herdr-tui-w
         - **If `gh` is missing/unauthenticated:** Record the GitHub compare URL along with a ready-to-paste PR title and concise summary.
 
 3. **No unauthorized delegation or layout changes.**
-   - Do not spawn sub-agents (`herdr tab create`, `herdr pane split`, `herdr agent start`), focus-steal tabs/workspaces, or stop `herdr server` unless explicitly instructed.
+   - Do not spawn sub-agents (`herdr workspace create`, `herdr tab create`, `herdr pane split`, `herdr agent start`), focus-steal tabs/workspaces, or stop `herdr server` unless explicitly instructed.
 
 4. **Supervise long-running jobs in one blocking bash monitor (zero LLM polling).**
    - For multi-minute/hour builds, trainings, or cloud/GPU runs, **never** poll in repeated short `sleep` tool calls. Detach the runner under `nohup setsid` (with `flock` if sharing a resource) and watch it in **one blocking bash loop** — follow [long-running-monitor.md](./references/long-running-monitor.md).

@@ -17,10 +17,10 @@ When a worker is blocked (`blocked`), stalled on a remote queue, or needs redire
 1. Inspect live state: `herdr agent get <worker-name>` and `herdr agent read <worker-name> --source recent` (or `herdr pane read "<pane_id>" --lines 80`).
 2. If the worker is parked inside a long blocking bash monitor (`working`):
    - Interrupt its active turn cleanly: `herdr agent send-keys <worker-name> esc` (or `ctrl+c` for raw bash foreground commands if needed).
-   - Confirm it settled: `herdr agent wait <worker-name> --state idle`.
+   - Confirm it settled: `herdr agent wait <worker-name> --until idle --timeout 30000`.
    - Submit the updated plan: `herdr agent prompt <worker-name> "<new plan>"`, ensuring superseded remote VMs/jobs and local lockfiles are released.
 
 ## 4. Sequential Pipeline Handoff (Stage $N \to N+1$)
 1. As soon as stage $N$ finishes (`idle`/`done`), verify `<state-dir>/reports/<worker-N>.md`, clean git commits, and confirm billable remote compute (`colab stop`, cloud GPU) + lockfiles are released.
-2. Keep worker $N$'s pane/tab alive (`idle`) for potential user follow-ups unless asked to close it.
+2. Keep worker $N$'s workspace alive (`idle`) for potential user follow-ups unless asked to close it.
 3. Propagate runtime lessons from stage $N$ into stage $N+1$'s handoff spec before starting worker $N+1$.
