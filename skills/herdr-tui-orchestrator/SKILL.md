@@ -36,9 +36,10 @@ If not, explain that this session is not running inside a Herdr TUI pane (`$HERD
 - **Preflight shared blockers once:** Run quick read-only checks on credentials, remote access (`git ls-remote`), and `gh auth status` before spawning workers.
 
 ### 2. Naming & Centralized XDG State Layout
-- **Naming rules (`/` in git branches & tab labels, `-` in agent & worktree folder names):**
-  - **Git branch & TUI tab label:** `<type>/<topic>` (e.g. `docs/update-readme-status`)
+- **Naming rules (`/` in git branches, `-` in agent, workspace & worktree folder names):**
+  - **Git branch:** `<type>/<topic>` (e.g. `docs/update-readme-status`)
   - **Herdr agent `<name>` & worktree directory:** `<type>-<topic>` — `1–32` chars of `a-z 0-9 - _ .`, starting with `[a-z0-9]`, **no `/`**.
+  - **Worker workspace label:** `└ <type>-<topic>` (set by `herdr-tui-spawn.sh`; the `└ ` prefix marks it as a child of the orchestrator's workspace in the sidebar).
 - **Centralized project state & worktree root (`${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/`):**
   - `worktrees/<worker-name>/` — isolated `git worktree` checkouts (1:1 match with agent `<name>`).
   - `tasks/<worker-name>.md` — durable handoff specs (see [handoff-template.md](./references/handoff-template.md)).
@@ -46,25 +47,27 @@ If not, explain that this session is not running inside a Herdr TUI pane (`$HERD
   - `assets/<worker-name>-*.png` — user-provided screenshots/reference images. Always copy user images here (never into a git worktree) and pass the path in the handoff spec or prompt.
   - `locks/<resource>.lock` and `logs/` — shared GPU/resource locks and detached logs.
 
-### 3. Spawn Worker Tabs/Panes & Start Tracked Agents
-Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane (`tab create` or `pane split`) and then attaches lifecycle tracking via `herdr agent start`:
-- **Unfocused tab by default (`--no-focus`):** Create a dedicated tab in the current workspace without stealing the user's focus (only use `herdr pane split "$HERDR_PANE_ID" --direction right --no-focus` when side-by-side splits are requested):
+### 3. Spawn Worker Subtree Workspaces & Start Tracked Agents
+Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane and then attaches lifecycle tracking via `herdr agent start`:
+- **One child workspace per worker, nested under yours (default):** Use the bundled [herdr-tui-spawn.sh](./scripts/herdr-tui-spawn.sh). It runs `herdr workspace create --no-focus` with label `└ <worker-name>`, then reorders it directly below the orchestrator's workspace (`$HERDR_WORKSPACE_ID`, after any existing `└ ` siblings) via the raw-socket `workspace.move` request (the CLI has no `workspace move`). Focus is never stolen. If the move fails (herdr protocol < 16), the worker still runs at the end of the sidebar and a warning is printed.
+- **Do not** use `herdr tab create` in your own workspace for workers. Only use `herdr pane split "$HERDR_PANE_ID" --direction right --no-focus` when the user explicitly asks for side-by-side splits.
   ```sh
-  # 1. Create an unfocused tab rooted at the centralized worktree (JSON output returns pane ID)
-  TAB_JSON=$(herdr tab create --cwd "$STATE_DIR/worktrees/<type>-<topic>" --label "<type>/<topic>" --no-focus)
-  # Extract pane_id from $TAB_JSON (inspect field shape once via jq/python if needed)
+  # 1. Create the child workspace rooted at the centralized worktree (prints JSON: workspace_id, tab_id, pane_id, label, moved)
+  SPAWN_JSON=$("<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-spawn.sh" <type>-<topic> "$STATE_DIR/worktrees/<type>-<topic>")
+  PANE_ID=$(printf '%s' "$SPAWN_JSON" | jq -r .pane_id)
 
   # 2. Start the interactive coding agent inside that shell pane (never pass -p print mode)
-  herdr agent start <type>-<topic> --kind <claude|codex|pi|opencode> --pane "<pane_id>" -- <agent-flags>
+  #    e.g. claude model/effort: -- --model sonnet --effort medium
+  herdr agent start <type>-<topic> --kind <claude|codex|pi|opencode> --pane "$PANE_ID" -- <agent-flags>
 
   # 3. Wait briefly ONLY for startup readiness (idle; accept workspace trust prompt via send-keys enter if blocked), then submit
-  herdr agent wait <type>-<topic> --state idle
+  herdr agent wait <type>-<topic> --until idle --timeout 30000
   herdr agent prompt <type>-<topic> "Use the herdr-tui-worker skill (<skills-dir>/herdr-tui-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute $STATE_DIR/tasks/<type>-<topic>.md. No subagents."
   ```
   *(Pass the exact installed path to `herdr-tui-worker/SKILL.md`. Pass `--machine "<label-or-id>"` before subcommands when targeting a saved remote SSH machine, and inline `herdr-tui-worker` rules if the remote host lacks the skill file.)*
 
 ### 4. Non-Blocking Monitoring ("Release-to-Idle" Across `claude`, `omp`, `codex`, `agy`)
-- **NEVER block your turn on completion waits:** Running `herdr agent wait <name>` or `herdr pane wait-output` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your pane status in `working` and **blocks the user from chatting** (only use `herdr agent wait --state idle` for the brief 1–5s startup readiness step above, never `--wait` on `herdr agent prompt`).
+- **NEVER block your turn on completion waits:** Running `herdr agent wait <name>` or `herdr pane wait-output` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your pane status in `working` and **blocks the user from chatting** (only use `herdr agent wait --until idle --timeout <ms>` for the brief 1–5s startup readiness step above, never `--wait` on `herdr agent prompt`).
 - **End your turn immediately after dispatch (`idle`):** All four CLIs (`claude`, `omp`, `codex`, `agy`) wake automatically via PTY input when `herdr agent prompt` submits text while `idle`:
   1. **Default for Agent Workers (Event-Driven Push — NO watchdog needed):** Give each worker your orchestrator agent name (or `$HERDR_PANE_ID`) in its handoff spec so it pushes completion/blocked notices via `herdr agent prompt <orchestrator-target> "<worker-name>: <summary>"` once your turn has ended. If siblings are still `working` (`herdr agent list`), note partial progress and end your turn immediately until the rest report.
   2. **Optional Detached Watchdog Script ([herdr-tui-watch.sh](./scripts/herdr-tui-watch.sh) — closed FDs, `<50ms` exit):** When guarding silent targets or plain commands, run the bundled helper detached with closed stdin/stdout/stderr:
@@ -81,5 +84,5 @@ Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane (`tab create` or
 - **PR creation (`gh` vs. fallback):** Have the worker check `gh auth status` and `gh pr list --head <branch> --state all`:
   - If authenticated: create (`gh pr create --base <base> --head <branch> --title "<clear title>" --body "<concise summary + verification>"`) or update an existing `OPEN` PR and report its URL + mergeability.
   - If `gh` is unavailable or unauthenticated: push the branch and report the compare URL plus a ready-to-paste PR title and concise summary.
-- **Release compute & keep workers warm:** Immediately stop billable remote compute (`colab stop`, cloud VMs) and cancel active timers, but **leave completed worker panes/tabs open (`idle`)** so revisions can be sent instantly via `herdr agent prompt <name> "<feedback>"`.
-- **Proactive cleanup prompt:** Closing a pane/tab (`herdr pane close` / `herdr tab close`) does **not** delete git worktrees, branches, caches, or state files. When work finishes, list the completed workers, panes/tabs, worktrees (`$STATE_DIR/worktrees/<name>`), branches, and state/asset files and ask user confirmation before running `git worktree remove "$STATE_DIR/worktrees/<name>"` + `git worktree prune`, `herdr tab close "<tab_id>"` (or `herdr pane close "<pane_id>"`), and state cleanup (never stopping `herdr server` or closing user-owned workspaces/panes).
+- **Release compute & keep workers warm:** Immediately stop billable remote compute (`colab stop`, cloud VMs) and cancel active timers, but **leave completed worker workspaces open (`idle`)** so revisions can be sent instantly via `herdr agent prompt <name> "<feedback>"`.
+- **Proactive cleanup prompt:** Closing a worker workspace (`herdr workspace close "<workspace_id>"`) does **not** delete git worktrees, branches, caches, or state files. When work finishes, list the completed workers, their `└ <name>` workspaces, worktrees (`$STATE_DIR/worktrees/<name>`), branches, and state/asset files and ask user confirmation before running `git worktree remove "$STATE_DIR/worktrees/<name>"` + `git worktree prune`, `herdr workspace close "<workspace_id>"` (or `herdr pane close "<pane_id>"` for user-requested splits), and state cleanup (never stopping `herdr server` or closing user-owned workspaces/panes — only close `└ ` workspaces you spawned).
