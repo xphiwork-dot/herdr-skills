@@ -9,7 +9,7 @@ Save each worker's durable spec to `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/
 - **Agent Command:** `<e.g., pi --provider opencode-go --model deepseek-v4.1-flash>`
 - **Worktree:** `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/worktrees/<worker-name>`
 - **Branch:** `<type>/<topic>` (branched from `<base>` at `<sha>`)
-- **Orchestrator Terminal:** `<$HC_TERMINAL_ID>`
+- **Orchestrator Terminal:** `<verified orchestrator terminal address>`
 
 ## Objective
 <1-3 sentences stating what the worker owns and what "done" looks like.>
@@ -24,5 +24,5 @@ Save each worker's durable spec to `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/
 1. `<test / link / lint / metric verification commands>`
 2. Clean `git status` in worktree; commits strictly on `<type>/<topic>`.
 3. If PR requested: `git fetch origin`, resolve any conflicts vs. `origin/<base>` in worktree, re-verify gates, push, check `gh pr list --head <branch> --state all`, and open/update PR via `gh pr create` (with clear title + concise summary) if `gh auth status` succeeds — otherwise report compare URL + ready-to-paste title & summary.
-4. Report via `hc send <$HC_TERMINAL_ID> "<concise verified summary>"` and stay idle.
+4. Report via `hc send <orchestrator-terminal> "<concise verified summary>"` and stay idle.
 ```

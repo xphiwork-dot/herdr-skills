@@ -27,8 +27,8 @@ Herdr has two distinct CLI surfaces depending on whether you run the **`herdr-co
 | Capability | `herdr-orchestrator` / `herdr-worker` (`hc` + `herdr-app`) | `herdr-tui-orchestrator` / `herdr-tui-worker` (`herdr` TUI) |
 | :--- | :--- | :--- |
 | **Session env var** | `$HC_TERMINAL_ID` (e.g. `t19`) | `$HERDR_PANE_ID` (e.g. `w1:p1`), `$HERDR_WORKSPACE_ID` |
-| **Preflight check** | `test -n "${HC_TERMINAL_ID:-}" && hc ls >/dev/null` | `test -n "${HERDR_PANE_ID:-}" && herdr agent list >/dev/null` |
-| **Spawn background worker** | `hc run --bg --name <type>-<topic> --cwd "<worktree>" <cmd>` | `scripts/herdr-tui-spawn.sh <type>-<topic> "<worktree>"` (child workspace `└ <name>` nested under orchestrator) + `herdr agent start <name> --kind <kind> --pane "<pane_id>"` |
+| **Preflight check** | Verify the inherited or confirmed terminal with `hc get <terminal>` | Resolve the pane and workspace with `scripts/herdr-tui-context.sh` |
+| **Spawn background worker** | `hc run --bg --parent <terminal> --name <type>-<topic> --cwd "<worktree>" <cmd>` | `scripts/herdr-tui-spawn.sh <type>-<topic> "<worktree>" <workspace_id>` (child workspace `└ <name>` nested under orchestrator) + `herdr agent start <name> --kind <kind> --pane "<pane_id>"` |
 | **Wait / monitor (non-blocking)** | Startup only: `hc wait <name> --timeout 15`; completion: end turn (`idle`) + `<hc>` push or detached `hc run --bg --rm --no-notify` watchdog / scheduled timer | Startup only: `herdr agent wait <name> --until idle --timeout 30000`; completion: end turn (`idle`) + `herdr agent prompt` push or detached `nohup setsid` watchdog / timer |
 | **Send task / revision** | `hc send <name> "<prompt>"` | `herdr agent prompt <name> "<prompt>"` |
 | **Read output** | `hc read --lines 80 <name>` / `hc get <name>` | `herdr agent read <name> --source recent` / `herdr pane read "<pane_id>" --lines 80` |
@@ -66,7 +66,7 @@ irm https://releases.herdr.dev/core/install.ps1 | iex
 
 Verify inside a Herdr terminal:
 ```bash
-test -n "${HC_TERMINAL_ID:-}" && hc ls
+test -n "${HC_TERMINAL_ID:-}" && hc get "$HC_TERMINAL_ID"
 ```
 
 ### Option B: Herdr TUI (`herdr`)
@@ -89,11 +89,19 @@ powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
 
 Verify inside a Herdr TUI pane:
 ```bash
-test -n "${HERDR_PANE_ID:-}" && herdr agent list
+test -n "${HERDR_PANE_ID:-}" && herdr pane get "$HERDR_PANE_ID"
 ```
+
+### Codex terminal identity
+
+Start Codex with `codex --no-daemon` inside the intended Herdr terminal. The shared Codex daemon can omit the Herdr variables or reuse a different terminal's values. Check the tool shell's address against the address in the terminal shell when diagnosing a mismatch.
+
+- **Herdr TUI:** The [context helper](skills/herdr-tui-orchestrator/scripts/herdr-tui-context.sh) accepts a pane ID or resolves the current Codex thread if Herdr registered that thread. If needed, run `herdr pane current` from the intended pane's shell and give Codex the confirmed `pane_id`.
+- **Herdr App:** Run `printf '%s\n' "$HC_TERMINAL_ID"` from the intended terminal's shell. Give Codex that address if its tools see a missing or stale value. The orchestrator passes it to `hc run --parent` and includes it in worker handoffs.
 
 ### Additional CLI Prerequisites
 
+- **Bash, `jq`, and Python 3** for the TUI context and workspace helpers
 - **`git`** (for per-worker `git worktree` isolation and branch management)
 - **At least one terminal coding agent:** `agy` (Antigravity CLI), `claude`, `pi`, `codex`, or `opencode`
 - **GitHub CLI (`gh`, optional):** Authenticate with `gh auth login` if you want workers to open/update PRs automatically

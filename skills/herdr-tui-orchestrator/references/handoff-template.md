@@ -9,7 +9,7 @@ Save each worker's durable spec to `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/
 - **Agent Kind & Flags:** `<e.g., --kind pi -- --provider opencode-go --model deepseek-v4.1-flash>`
 - **Worktree:** `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/worktrees/<worker-name>`
 - **Branch:** `<type>/<topic>` (branched from `<base>` at `<sha>`)
-- **Orchestrator Pane / Agent:** `<$HERDR_PANE_ID or orchestrator agent name>`
+- **Orchestrator Pane / Agent:** `<resolved orchestrator pane ID or agent name>`
 - **Report File:** `<state-dir>/reports/<worker-name>.md`
 
 ## Objective

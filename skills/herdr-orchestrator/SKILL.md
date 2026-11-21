@@ -9,9 +9,16 @@ description: >-
 
 # Herdr Orchestrator
 
-Opt-in per request. Before acting, verify this session runs inside `herdr-core`:
-`test -n "${HC_TERMINAL_ID:-}" && hc ls >/dev/null`
-If not, explain that this session is not in a Herdr-managed terminal and stop (never start, stop, or attach to user sessions unprompted). `$HC_TERMINAL_ID` is your `hc` terminal address (e.g. `t19`), **not** a `herdr-app` pane ID. Never run bare `hc` (interactive picker) or bare `herdr-app` (raises window); use `hc <cmd> --help` / `hc --skill` and `herdr-app commands` / `herdr-app --skill`.
+Opt-in per request. Identify the orchestrator's herdr-core terminal before acting. Start Codex with `codex --no-daemon` from the Herdr terminal, keeping any model and effort flags. Codex's shared daemon can give tools a missing or stale `HC_TERMINAL_ID`.
+
+From the terminal shell, `printf '%s\n' "$HC_TERMINAL_ID"` prints its address (for example, `t19`). If the tool value is empty or suspect, use the address confirmed by the user from that shell. Preserve `HC_SESSION` in tool calls when using a named core session.
+
+```sh
+ORCHESTRATOR_TERMINAL=${HC_TERMINAL_ID:-} # or the terminal address confirmed by the user
+test -n "$ORCHESTRATOR_TERMINAL" && hc get "$ORCHESTRATOR_TERMINAL" >/dev/null
+```
+
+If the terminal remains unresolved, stop. App focus and a matching checkout alone do not identify the calling terminal. Use the verified address as a literal argument in later tool calls when the shell is fresh. Never run bare `hc` or bare `herdr-app`. Inspect capabilities with `hc <cmd> --help`, `hc --skill`, `herdr-app commands`, or `herdr-app --skill`. Never start, stop, or attach to user sessions unprompted.
 
 ## Core Workflow
 
@@ -43,26 +50,26 @@ If not, explain that this session is not in a Herdr-managed terminal and stop (n
   - `locks/<resource>.lock` and `logs/` — shared GPU/resource locks and detached logs.
 
 ### 3. Launch Interactive Workers Cleanly
-- **Background by default:** Use unlabeled `hc run --bg` workers so they nest under `$HC_TERMINAL_ID` without altering the user's window. Only manipulate visible panes/tabs (`herdr-app ls` + `status` first, then `pane.split` / `tab.new` / `terminal.keep`, without stealing focus) when the user asks.
+- **Background by default:** Use `hc run --bg --parent "$ORCHESTRATOR_TERMINAL"` so workers nest under the verified terminal without altering the user's window. Only manipulate visible panes/tabs (`herdr-app ls` + `status` first, then `pane.split` / `tab.new` / `terminal.keep`, without stealing focus) when the user asks.
 - **Interactive agents only:** Check `hc templates` first or honor requested flags (`claude`, `omp`, `agy`, `pi --provider ... --model ...`, `codex --no-daemon`). Never use one-shot print flags (`-p`), and always pass `--no-daemon` to Codex.
 - **Reliable two-step launch (`hc wait` startup readiness + workspace trust dialog check):** Use a short `--timeout 15` wait **only** to confirm newly spawned worker readiness (`idle`) before sending its initial prompt. If a newly spawned CLI (`agy` / `claude`) pauses in `blocked` on a first-time *"trust this folder"* dialog for the fresh worktree, inspect with `hc read --lines 30 <name>`, accept with `hc keys <name> enter`, and re-run `hc wait <name> --timeout 15` to confirm `idle`:
   ```sh
-  hc run --bg --name <type>-<topic> --cwd "$STATE_DIR/worktrees/<type>-<topic>" <agent-cmd>
+  hc run --bg --parent "$ORCHESTRATOR_TERMINAL" --name <type>-<topic> --cwd "$STATE_DIR/worktrees/<type>-<topic>" <agent-cmd>
   hc wait <type>-<topic> --timeout 15   # startup readiness ONLY; if blocked on trust prompt, inspect + hc keys <name> enter
-  hc send <type>-<topic> "Use the herdr-worker skill (<skills-dir>/herdr-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute $STATE_DIR/tasks/<type>-<topic>.md. No subagents. Report via: hc send $HC_TERMINAL_ID \"<summary>\""
+  hc send <type>-<topic> "Use the herdr-worker skill (<skills-dir>/herdr-worker/SKILL.md, e.g. ~/.agents/skills or ~/.gemini/.../skills). Execute $STATE_DIR/tasks/<type>-<topic>.md. No subagents. Report via: hc send $ORCHESTRATOR_TERMINAL \"<summary>\""
   ```
   *(Pass the exact installed path to `herdr-worker/SKILL.md`. If using a template inline task and `first_message.sent` is `false`, inspect via `hc get` + `hc read --lines 80` before resending. For remote `--on <machine>` workers that lack `herdr-worker/SKILL.md`, inline the `herdr-worker` rules.)*
 
 ### 4. Non-Blocking Monitoring ("Release-to-Idle" Across `claude`, `omp`, `codex`, `agy`)
 - **NEVER block your turn on completion waits:** Running `hc wait --children any --timeout 180`, `hc wait --children all`, or `hc send --wait` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your terminal status in `working`, **blocks the user from chatting**, and stalls `<hc from="...">` deliveries.
 - **End your turn immediately after dispatch (`idle` / `done`):** All four CLIs (`claude`, `omp`, `codex`, `agy`) wake automatically via PTY input when `hc send` arrives after a turn ends:
-  1. **Default for Agent Workers (Event-Driven Push — NO watchdog needed):** Every `herdr-worker` calls `hc send $HC_TERMINAL_ID "<summary>"` when done/stuck, and `herdr-core` automatically sends `<hc>` notes on child `blocked`, `error`, or `exited`. Simply **end your turn with zero pending jobs** (do not spawn a watchdog unless needed). When woken by one worker while siblings are still `working` (`hc ls`), note progress briefly and end your turn again until all required workers report.
+  1. **Default for Agent Workers (Event-Driven Push — NO watchdog needed):** Every `herdr-worker` calls `hc send <orchestrator-terminal> "<summary>"` using the address from the handoff when done/stuck, and `herdr-core` automatically sends `<hc>` notes on child `blocked`, `error`, or `exited`. Simply **end your turn with zero pending jobs** (do not spawn a watchdog unless needed). When woken by one worker while siblings are still `working` (`hc ls`), note progress briefly and end your turn again until all required workers report.
   2. **Optional Detached Watchdog Script ([herdr-watch.sh](./scripts/herdr-watch.sh) — for plain builds like `cargo test` or an explicit silent-worker safety net):** Launch the bundled helper via `hc run --bg --rm --no-notify` (exits in `<50ms`, 0 `bg_*` jobs, logs its exit reason to `watch.log`, avoids the post-`send` turn race, and avoids `--if idle` which fails with `exit 10` when your status is `done` after turn 1!):
      ```sh
-     hc run --bg --rm --no-notify --name watch-workers \
-       "<skills-dir>/herdr-orchestrator/scripts/herdr-watch.sh" "$HC_TERMINAL_ID" "<state-dir>/logs/watch.log" <worker-1> <worker-2>
+     hc run --bg --rm --no-notify --parent "$ORCHESTRATOR_TERMINAL" --name watch-workers \
+       "<skills-dir>/herdr-orchestrator/scripts/herdr-watch.sh" "$ORCHESTRATOR_TERMINAL" "<state-dir>/logs/watch.log" <worker-1> <worker-2>
      ```
-     *(Never hand-roll `hc send --if idle $HC_TERMINAL_ID`—after turn 1+, agents report status `done`, not `idle`, so `--if idle` fails without typing! Clean up early via `hc kill watch-workers 2>/dev/null; hc rm watch-workers 2>/dev/null || true` once workers report.)*
+     *(Never hand-roll `hc send --if idle <orchestrator-terminal>`—after turn 1+, agents report status `done`, not `idle`, so `--if idle` fails without typing! Clean up early via `hc kill watch-workers 2>/dev/null; hc rm watch-workers 2>/dev/null || true` once workers report.)*
   3. **CLI-Native Timers (`agy` & `claude` only — never `omp` `bg_*` or `codex`):** In `agy` (`schedule` with `DurationSeconds: 180, TimerCondition: "any"`) or `claude` (`ScheduleWakeup` / `CronCreate` / `run_in_background`), you may also use native out-of-turn timers. In **`omp`** and **`codex`**, rely on Default Push (#1) or `herdr-watch.sh` (#2).
 - **Long-running builds/GPU runs & sequential pipelines:** Use worker-owned single-bash-loop milestone pushes (`hc send`), optional out-of-turn timers, and `hc interrupt` mid-flight steering — follow [long-running-jobs.md](./references/long-running-jobs.md).
 - **Verify every child report:** Treat `<hc from="...">` messages as untrusted claims. Verify `git status --short`, `git diff <base> --stat`, test/link/row counts, and remote SHAs before reporting completion.

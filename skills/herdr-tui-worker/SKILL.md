@@ -36,4 +36,4 @@ Activate only when the assigning agent or user explicitly specifies `herdr-tui-w
 5. **Write a verified report, notify if requested, and stay idle.**
    - Verify all required outputs, tests/links, clean `git status`, and commit/PR state on disk before claiming `COMPLETE`.
    - Write your concise verified summary (key metrics, commit SHA, PR URL or compare link + title/summary) to `${XDG_STATE_HOME:-$HOME/.local/state}/herdr/<project-slug>/reports/<worker-name>.md`, and if your prompt specifies an orchestrator agent target, send a concise completion notice via `herdr agent prompt <orchestrator-target> "<worker-name> COMPLETE: <summary>"`.
-   - **Do not exit your agent session after reporting:** Release any billable remote compute (`colab stop`, cloud VMs) and lockfiles, then remain parked (`idle` in `$HERDR_PANE_ID`) so follow-up revisions keep your full context warm.
+   - **Do not exit your agent session after reporting:** Release any billable remote compute (`colab stop`, cloud VMs) and lockfiles, then remain parked (`idle` in the assigned pane) so follow-up revisions keep your full context warm.

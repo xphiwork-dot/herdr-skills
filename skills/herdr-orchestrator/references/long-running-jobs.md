@@ -3,7 +3,7 @@
 Read this reference when orchestrating multi-minute/hour builds, trainings, or cloud/GPU runs (`colab`, `kaggle`, remote SSH).
 
 ## 1. Proactive Milestone Push (Zero Idle LLM Polling)
-- Instruct the worker to run a **single blocking bash monitor** (see `~/.agents/skills/herdr-worker/references/long-running-monitor.md`) that pushes `hc send $HC_TERMINAL_ID "<worker-name> milestone: <event>"` **only** on real state transitions:
+- Instruct the worker to run a **single blocking bash monitor** (see `~/.agents/skills/herdr-worker/references/long-running-monitor.md`) that pushes `hc send <orchestrator-terminal> "<worker-name> milestone: <event>"` **only** on real state transitions:
   - Job launched / `QUEUED` -> `RUNNING`
   - Sanity or smoke gates passed
   - Coarse 15–30 min heartbeats with concrete progress (rows/steps, elapsed time)
@@ -12,10 +12,10 @@ Read this reference when orchestrating multi-minute/hour builds, trainings, or c
 - **High-frequency cron polling (opt-in only):** Use a short-interval `schedule` cron (e.g., `* * * * *`) **only** when the user explicitly asks for fixed-interval heartbeats.
 
 ## 2. Out-of-Turn Dead-Man Watchdog / Safety Timer (Never Hold `working` Status)
-- **Never** hold the orchestrator's turn open with a foreground `hc wait` or an in-turn `bg_*` shell job that keeps the orchestrator in `working` (`waiting on 1 job`). Always end your turn so `$HC_TERMINAL_ID` returns to `idle`.
+- **Never** hold the orchestrator's turn open with a foreground `hc wait` or an in-turn `bg_*` shell job that keeps the orchestrator in `working` (`waiting on 1 job`). Always end your turn so the orchestrator returns to `idle`.
 - Choose whichever out-of-turn safety net fits your harness:
   1. **Native out-of-turn timer (`schedule` / `ScheduleWakeup` / `CronCreate`):** Arm a one-shot timer slightly longer than the worker's heartbeat interval (e.g., `DurationSeconds: 2100` for a 20m heartbeat, `TimerCondition: "any"`). Always cancel any prior active timer before re-arming, and cancel on completion.
-  2. **Detached `hc` watchdog (`../scripts/herdr-watch.sh`):** In harnesses without out-of-turn timers (e.g. `omp`/`codex`), launch `<skills-dir>/herdr-orchestrator/scripts/herdr-watch.sh "$HC_TERMINAL_ID" "<state-dir>/logs/watch.log" <worker-name>` under `hc run --bg --rm --no-notify` so your turn ends in `<50ms`, exit reasons are logged to `watch.log`, and `done`-state orchestrators are nudged cleanly (never use `hc send --if idle`, which fails with exit 10 when status is `done`).
+  2. **Detached `hc` watchdog (`../scripts/herdr-watch.sh`):** In harnesses without out-of-turn timers (e.g. `omp`/`codex`), launch `<skills-dir>/herdr-orchestrator/scripts/herdr-watch.sh "$ORCHESTRATOR_TERMINAL" "<state-dir>/logs/watch.log" <worker-name>` under `hc run --bg --rm --no-notify --parent "$ORCHESTRATOR_TERMINAL"` so your turn ends in `<50ms`, exit reasons are logged to `watch.log`, and `done`-state orchestrators are nudged cleanly (never use `hc send --if idle`, which fails with exit 10 when status is `done`).
 
 ## 3. Mid-Flight Steering & Backend Pivoting
 When woken by a milestone, `<hc> ... is blocked`, queue stall, or user pivot:

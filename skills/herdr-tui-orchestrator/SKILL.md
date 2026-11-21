@@ -12,9 +12,17 @@ description: >-
 
 Opt-in per request for the **Herdr TUI** (`herdr` multiplexer CLI — for `herdr-core` `hc` + `herdr-app`, use `herdr-orchestrator` instead).
 
-Before acting, verify this session runs inside a Herdr TUI pane:
-`test -n "${HERDR_PANE_ID:-}" && herdr agent list >/dev/null`
-If not, explain that this session is not running inside a Herdr TUI pane (`$HERDR_PANE_ID` is unset) and stop—never start, attach, or stop user sessions unprompted. Never run bare `herdr` without subcommands (opens/attaches the interactive TUI); inspect capabilities via `herdr --help` and `herdr <workspace|tab|pane|agent> --help`.
+Before acting, resolve your pane and workspace with the read-only [herdr-tui-context.sh](./scripts/herdr-tui-context.sh) helper. It uses an exact Codex thread match from Herdr's agent registry when available and otherwise validates the inherited `HERDR_PANE_ID`.
+
+```bash
+context=$("<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-context.sh") || exit 1
+ORCHESTRATOR_PANE=$(jq -er .pane_id <<< "$context")
+ORCHESTRATOR_WORKSPACE=$(jq -er .workspace_id <<< "$context")
+```
+
+Codex command tools can lose Herdr's environment when the app-server daemon is shared. Launch Codex from its Herdr pane with `codex --no-daemon`, keeping any model and effort flags. If the resolver still can't identify the pane or the inherited value looks stale, have the user run `herdr pane current` from the shell in the intended pane and pass the confirmed `pane_id` as the helper's first argument. A command tool without a pane ID may see whichever pane is focused, even when it belongs to another session. If the identity or server remains unresolved, stop. Never open, attach to, or stop user sessions unprompted. For a named Herdr session, preserve its `HERDR_SOCKET_PATH` in tool calls.
+
+Use the resolved IDs as literal arguments in later tool calls when the shell is fresh. Never run bare `herdr` without subcommands. Inspect capabilities via `herdr --help` and `herdr <workspace|tab|pane|agent> --help`.
 
 ## Core Workflow
 
@@ -49,15 +57,16 @@ If not, explain that this session is not running inside a Herdr TUI pane (`$HERD
 
 ### 3. Spawn Worker Subtree Workspaces & Start Tracked Agents
 Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane and then attaches lifecycle tracking via `herdr agent start`:
-- **One child workspace per worker, nested under yours (default):** Use the bundled [herdr-tui-spawn.sh](./scripts/herdr-tui-spawn.sh). It runs `herdr workspace create --no-focus` with label `└ <worker-name>`, then reorders it directly below the orchestrator's workspace (`$HERDR_WORKSPACE_ID`, after any existing `└ ` siblings) via the raw-socket `workspace.move` request (the CLI has no `workspace move`). Focus is never stolen. If the move fails (herdr protocol < 16), the worker still runs at the end of the sidebar and a warning is printed.
-- **Do not** use `herdr tab create` in your own workspace for workers. Only use `herdr pane split "$HERDR_PANE_ID" --direction right --no-focus` when the user explicitly asks for side-by-side splits.
+- **One child workspace per worker, nested under yours (default):** Use the bundled [herdr-tui-spawn.sh](./scripts/herdr-tui-spawn.sh). It runs `herdr workspace create --no-focus` with label `└ <worker-name>`, then reorders it directly below the orchestrator's workspace (`$ORCHESTRATOR_WORKSPACE`, after any existing `└ ` siblings) via the raw-socket `workspace.move` request (the CLI has no `workspace move`). Focus is never stolen. If the move fails (herdr protocol < 16), the worker still runs at the end of the sidebar and a warning is printed.
+- **Do not** use `herdr tab create` in your own workspace for workers. Only use `herdr pane split "$ORCHESTRATOR_PANE" --direction right --no-focus` when the user explicitly asks for side-by-side splits.
   ```sh
   # 1. Create the child workspace rooted at the centralized worktree (prints JSON: workspace_id, tab_id, pane_id, label, moved)
-  SPAWN_JSON=$("<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-spawn.sh" <type>-<topic> "$STATE_DIR/worktrees/<type>-<topic>")
+  SPAWN_JSON=$("<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-spawn.sh" <type>-<topic> "$STATE_DIR/worktrees/<type>-<topic>" "$ORCHESTRATOR_WORKSPACE")
   PANE_ID=$(printf '%s' "$SPAWN_JSON" | jq -r .pane_id)
 
   # 2. Start the interactive coding agent inside that shell pane (never pass -p print mode)
-  #    e.g. claude model/effort: -- --model sonnet --effort medium
+  #    Codex: --kind codex, then -- --no-daemon followed by requested flags
+  #    Claude: --kind claude, then -- --model sonnet --effort medium
   herdr agent start <type>-<topic> --kind <claude|codex|pi|opencode> --pane "$PANE_ID" -- <agent-flags>
 
   # 3. Wait briefly ONLY for startup readiness (idle; accept workspace trust prompt via send-keys enter if blocked), then submit
@@ -69,7 +78,7 @@ Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane and then attache
 ### 4. Non-Blocking Monitoring ("Release-to-Idle" Across `claude`, `omp`, `codex`, `agy`)
 - **NEVER block your turn on completion waits:** Running `herdr agent wait <name>` or `herdr pane wait-output` in a foreground tool call—**or** inside an `omp` background bash job (`bg_*` keeps `omp` stuck in `waiting on 1 job` / `working`!) or an open-FD `&` command in `codex`—locks your pane status in `working` and **blocks the user from chatting** (only use `herdr agent wait --until idle --timeout <ms>` for the brief 1–5s startup readiness step above, never `--wait` on `herdr agent prompt`).
 - **End your turn immediately after dispatch (`idle`):** All four CLIs (`claude`, `omp`, `codex`, `agy`) wake automatically via PTY input when `herdr agent prompt` submits text while `idle`:
-  1. **Default for Agent Workers (Event-Driven Push — NO watchdog needed):** Give each worker your orchestrator agent name (or `$HERDR_PANE_ID`) in its handoff spec so it pushes completion/blocked notices via `herdr agent prompt <orchestrator-target> "<worker-name>: <summary>"` once your turn has ended. If siblings are still `working` (`herdr agent list`), note partial progress and end your turn immediately until the rest report.
+  1. **Default for Agent Workers (Event-Driven Push — NO watchdog needed):** Give each worker your orchestrator agent name (or the resolved `$ORCHESTRATOR_PANE`) in its handoff spec so it pushes completion/blocked notices via `herdr agent prompt <orchestrator-target> "<worker-name>: <summary>"` once your turn has ended. If siblings are still `working` (`herdr agent list`), note partial progress and end your turn immediately until the rest report.
   2. **Optional Detached Watchdog Script ([herdr-tui-watch.sh](./scripts/herdr-tui-watch.sh) — closed FDs, `<50ms` exit):** When guarding silent targets or plain commands, run the bundled helper detached with closed stdin/stdout/stderr:
      ```sh
      nohup setsid "<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-watch.sh" \

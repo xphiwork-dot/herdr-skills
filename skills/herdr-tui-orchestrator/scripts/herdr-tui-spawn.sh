@@ -11,17 +11,29 @@
 #      still runs, just at the end of the sidebar (a warning goes to stderr).
 #   3. Prints JSON: {"workspace_id","tab_id","pane_id","label","moved"}
 #
-# Parent defaults to $HERDR_WORKSPACE_ID. Socket: $HERDR_SOCKET_PATH or
-# ${XDG_CONFIG_HOME:-$HOME/.config}/herdr/herdr.sock. Requires jq + python3.
+# Parent defaults to $HERDR_WORKSPACE_ID or the workspace of the resolved pane. Requires jq + python3.
 set -euo pipefail
 
 name=${1:?usage: herdr-tui-spawn.sh <worker-name> <cwd> [parent-workspace-id]}
 cwd=${2:?usage: herdr-tui-spawn.sh <worker-name> <cwd> [parent-workspace-id]}
 parent=${3:-${HERDR_WORKSPACE_ID:-}}
-socket=${HERDR_SOCKET_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/herdr.sock}
 label="└ $name"
 
 [ -d "$cwd" ] || { echo "error: cwd not found: $cwd" >&2; exit 2; }
+
+if [[ -z "$parent" ]]; then
+  context=$("$(dirname "${BASH_SOURCE[0]}")/herdr-tui-context.sh")
+  parent=$(jq -er .workspace_id <<< "$context")
+fi
+if ! herdr workspace get "$parent" >/dev/null; then
+  echo "error: parent workspace $parent is unavailable" >&2
+  exit 1
+fi
+
+socket=${HERDR_SOCKET_PATH:-}
+if [[ -z "$socket" ]]; then
+  socket=$(herdr status server --json | jq -er '.socket | strings | select(length > 0)') || socket=
+fi
 
 created=$(herdr workspace create --cwd "$cwd" --label "$label" --no-focus)
 ws=$(printf '%s' "$created" | jq -er '.result.workspace.workspace_id // .result.root_pane.workspace_id')
@@ -29,8 +41,8 @@ pane=$(printf '%s' "$created" | jq -er '.result.root_pane.pane_id')
 tab=$(printf '%s' "$created" | jq -r '.result.root_pane.tab_id // .result.tab.tab_id // empty')
 
 moved=false
-if [ -z "$parent" ]; then
-  echo "warning: no parent workspace (\$HERDR_WORKSPACE_ID unset); left at end of sidebar" >&2
+if [ -z "$socket" ]; then
+  echo "warning: server socket unavailable; left at end of sidebar" >&2
 else
   # Target index: just past the parent and its contiguous "└ " children.
   desired=$(herdr workspace list | jq -r --arg p "$parent" --arg ws "$ws" '
