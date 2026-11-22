@@ -29,7 +29,7 @@ Herdr has two distinct CLI surfaces depending on whether you run the **`herdr-co
 | **Session env var** | `$HC_TERMINAL_ID` (e.g. `t19`) | `$HERDR_PANE_ID` (e.g. `w1:p1`), `$HERDR_WORKSPACE_ID` |
 | **Preflight check** | Verify the inherited or confirmed terminal with `hc get <terminal>` | Resolve the pane and workspace with `scripts/herdr-tui-context.sh` |
 | **Spawn background worker** | `hc run --bg --parent <terminal> --name <type>-<topic> --cwd "<worktree>" <cmd>` | `scripts/herdr-tui-spawn.sh <type>-<topic> "<worktree>" <workspace_id>` (child workspace `└ <name>` nested under orchestrator) + `herdr agent start <name> --kind <kind> --pane "<pane_id>"` |
-| **Wait / monitor (non-blocking)** | Startup only: `hc wait <name> --timeout 15`; completion: end turn (`idle`) + `<hc>` push or detached `hc run --bg --rm --no-notify` watchdog / scheduled timer | Startup only: `herdr agent wait <name> --until idle --timeout 30000`; completion: end turn (`idle`) + `herdr agent prompt` push or detached `nohup setsid` watchdog / timer |
+| **Wait / monitor (non-blocking)** | Startup only: `hc wait <name> --timeout 15`; completion: end turn (`idle`) + `<hc>` push or detached `hc run --bg --rm --no-notify` watchdog / scheduled timer | Startup only: `herdr agent wait <name> --until idle --timeout 30000`; completion: workers write `status/` files, detached `herdr-tui-inbox.sh watch` wakes the orchestrator only on blocked/stalled/all-complete, `herdr-tui-inbox.sh gate` before any readiness claim |
 | **Send task / revision** | `hc send <name> "<prompt>"` | `herdr agent prompt <name> "<prompt>"` |
 | **Read output** | `hc read --lines 80 <name>` / `hc get <name>` | `herdr agent read <name> --source recent` / `herdr pane read "<pane_id>" --lines 80` |
 | **Interrupt mid-turn** | `hc interrupt <name>` | `herdr agent send-keys <name> esc` |
@@ -101,7 +101,7 @@ Start Codex with `codex --no-daemon` inside the intended Herdr terminal. The sha
 
 ### Additional CLI Prerequisites
 
-- **Bash, `jq`, and Python 3** for the TUI context and workspace helpers
+- **Bash, `jq`, and Python 3** for the TUI context and workspace helpers (`herdr-tui-inbox.sh` needs Bash 4+; on macOS install it with `brew install bash`)
 - **`git`** (for per-worker `git worktree` isolation and branch management)
 - **At least one terminal coding agent:** `agy` (Antigravity CLI), `claude`, `pi`, `codex`, or `opencode`
 - **GitHub CLI (`gh`, optional):** Authenticate with `gh auth login` if you want workers to open/update PRs automatically
@@ -232,7 +232,7 @@ herdr-skills/
 ├── skills/
 │   ├── herdr-orchestrator/          # hc + herdr-app orchestrator (+ scripts/herdr-watch.sh & references/)
 │   ├── herdr-worker/                # hc + herdr-app worker (+ references/)
-│   ├── herdr-tui-orchestrator/      # herdr TUI orchestrator (+ scripts/herdr-tui-spawn.sh, herdr-tui-watch.sh & references/)
+│   ├── herdr-tui-orchestrator/      # herdr TUI orchestrator (+ scripts/herdr-tui-spawn.sh, herdr-tui-inbox.sh & references/)
 │   └── herdr-tui-worker/            # herdr TUI worker (+ references/)
 ├── .claude-plugin/plugin.json       # Claude Code plugin manifest
 ├── package.json                     # Pi & skills package manifest
