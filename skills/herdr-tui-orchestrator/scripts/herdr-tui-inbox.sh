@@ -282,6 +282,15 @@ cmd_watch() {
     local args=(watch "$dir" --interval "$interval" --stall-min "$stall" --max-hours "$maxh")
     [ "$each" = 1 ] && args+=(--each)
     # Closed FDs + new session: the caller's turn (omp, codex, claude, pi, agy) returns at once.
+    # A user service survives command runners that reap detached descendants.
+    if command -v systemd-run >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
+      local env_args=(--setenv="PATH=$PATH")
+      if [ -n "${HERDR_SOCKET_PATH:-}" ]; then env_args+=(--setenv="HERDR_SOCKET_PATH=$HERDR_SOCKET_PATH"); fi
+      systemd-run --user --collect "${env_args[@]}" --working-directory="$PWD" \
+        --property="StandardOutput=append:$log" --property="StandardError=append:$log" \
+        bash "$(realpath "$0")" "${args[@]}"
+      return
+    fi
     nohup setsid bash "$0" "${args[@]}" </dev/null >>"$log" 2>&1 &
     echo "watcher started (pid $!, log $log)"
     return

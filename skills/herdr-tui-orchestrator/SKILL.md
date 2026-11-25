@@ -68,7 +68,10 @@ Unlike `hc run --bg`, `herdr` TUI first provisions a shell pane and then attache
   # 2. Start the interactive coding agent inside that shell pane (never pass -p print mode)
   #    Codex: --kind codex, then -- --no-daemon followed by requested flags
   #    Claude: --kind claude, then -- --model sonnet --effort medium
-  herdr agent start <type>-<topic> --kind <claude|codex|pi|opencode> --pane "$PANE_ID" -- <agent-flags>
+  # Codex linked worktrees share Git metadata outside the sandbox working directory.
+  GIT_COMMON=$(git -C "$STATE_DIR/worktrees/<type>-<topic>" rev-parse --path-format=absolute --git-common-dir)
+  herdr agent start <type>-<topic> --kind codex --pane "$PANE_ID" -- --no-daemon \
+    --add-dir "$GIT_COMMON" --add-dir "$STATE_DIR/status" --add-dir "$STATE_DIR/reports" <agent-flags>
 
   # 3. Wait briefly ONLY for startup readiness (idle; accept workspace trust prompt via send-keys enter if blocked), then submit
   herdr agent wait <type>-<topic> --until idle --timeout 30000
