@@ -81,12 +81,26 @@ status_problems() {
   wt=$(jq -r '.worktree // ""' <<<"$json")
   if [ -z "$rev" ]; then
     echo "no tested rev"
-  elif [ -n "$wt" ] && [ -d "$wt" ]; then
-    local head want
-    head=$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)
-    want=$(git -C "$wt" rev-parse --verify --quiet "$rev^{commit}" 2>/dev/null || true)
-    [ -n "$want" ] && [ "$want" = "$head" ] || echo "rev $rev is not worktree HEAD ${head:0:7}"
-    [ -z "$(git -C "$wt" status --porcelain --untracked-files=no 2>/dev/null)" ] || echo "uncommitted tracked changes in $wt"
+  elif [ -z "$wt" ]; then
+    echo "no worktree path"
+  elif [ ! -d "$wt" ]; then
+    echo "worktree unavailable: $wt"
+  else
+    local root actual head want tracked
+    if ! root=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) ||
+       ! actual=$(cd -- "$wt" && pwd -P) ||
+       [ "$root" != "$actual" ] ||
+       ! head=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null); then
+      echo "cannot verify worktree HEAD: $wt"
+    else
+      want=$(git -C "$wt" rev-parse --verify --quiet "$rev^{commit}" 2>/dev/null || true)
+      [ -n "$want" ] && [ "$want" = "$head" ] || echo "rev $rev is not worktree HEAD ${head:0:7}"
+      if ! tracked=$(git -C "$wt" status --porcelain --untracked-files=no 2>/dev/null); then
+        echo "cannot verify tracked changes in $wt"
+      elif [ -n "$tracked" ]; then
+        echo "uncommitted tracked changes in $wt"
+      fi
+    fi
   fi
   since=$(jq -r '.working_since // 0' <<<"$json")
   rf="$dir/reports/$w.md"
@@ -340,11 +354,13 @@ cmd_watch() {
       fi
       pane_prev[$w]=$a
       [ -n "$needs" ] && enqueue "needs:$w:$seq" "$w ${st^^} needs: $needs"
-      if [ "$st" = complete ]; then
+      # A missing agent is not settled, even if it last reported complete.
+      # Let it use the same delayed missing-pane wake as unfinished agents.
+      if [ "$st" = complete ] && [ "$a" != missing ]; then
         if settled "$a"; then
           [ "$each" = 1 ] && enqueue "complete:$w:$seq" "$w COMPLETE rev=$(jq -r '.rev' <<<"$json")"
         else
-          all=0  # Status says complete but the agent is still doing more: not done, no wake.
+          all=0  # The live agent is not settled yet.
         fi
         unset "idle_since[$w]"
         continue
