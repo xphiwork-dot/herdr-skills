@@ -10,6 +10,8 @@ description: >-
 
 Activate only when the assigning agent or user explicitly specifies `herdr-tui-worker`. Follow higher-priority host rules and the assignment; this skill grants no extra permissions.
 
+When a pane address is needed and the Codex environment omitted it, look up the worker name from your handoff with `herdr agent get <worker-name>`. Verify the assigned worktree and recent handoff text with `herdr pane read <pane_id> --lines 40` before using the address.
+
 ## Worker Rules
 
 1. **Stay strictly within your centralized worktree and assigned boundaries.**
