@@ -14,6 +14,18 @@ if [[ -z "$pane" && -n "$thread" ]]; then
 fi
 
 pane=${pane:-${HERDR_PANE_ID:-}}
+# Shared-daemon Codex panes may omit agent_session but display the thread title.
+index=${CODEX_HOME:-$HOME/.codex}/session_index.jsonl
+if [[ -z "$pane" && -n "$thread" && -r "$index" ]]; then
+  title=$(jq -rs --arg id "$thread" '[.[] | select(.id == $id) | .thread_name] | last // empty' "$index")
+  if [[ -n "$title" ]]; then
+    pane=$(jq -r --arg dir "$PWD" --arg title "$title | ${PWD##*/}" '
+      [.result.agents[] | select(.agent == "codex" and .agent_session == null
+        and .foreground_cwd == $dir and ((.terminal_title_stripped // "")
+        | sub("^[^[:alnum:][:space:]]+ "; "") == $title or . == $title)) | .pane_id] | unique
+      | if length == 1 then .[0] else empty end' <<< "$agents")
+  fi
+fi
 if [[ -z "$pane" ]]; then
   echo 'Cannot identify the orchestrator pane. Restart Codex with --no-daemon from Herdr or pass a pane ID confirmed by the user.' >&2
   exit 1

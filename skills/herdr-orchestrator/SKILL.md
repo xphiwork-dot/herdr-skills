@@ -11,7 +11,7 @@ description: >-
 
 Opt-in per request. Identify the orchestrator's herdr-core terminal before acting. Start Codex with `codex --no-daemon` from the Herdr terminal, keeping any model and effort flags. Codex's shared daemon can give tools a missing or stale `HC_TERMINAL_ID`.
 
-From the terminal shell, `printf '%s\n' "$HC_TERMINAL_ID"` prints its address (for example, `t19`). If the tool value is empty or suspect, use the address confirmed by the user from that shell. Preserve `HC_SESSION` in tool calls when using a named core session.
+From the terminal shell, `printf '%s\n' "$HC_TERMINAL_ID"` prints its address (for example, `t19`). If the tool value is empty or suspect, list live terminals with `hc ls --json` in the intended core session. Inspect plausible candidates with `hc get <terminal>` and `hc read --lines 40 <terminal>`. Use a terminal only when the recent conversation uniquely matches this thread. If identification remains ambiguous, ask for the address from the originating shell. Preserve `HC_SESSION` in tool calls when using a named core session.
 
 ```sh
 ORCHESTRATOR_TERMINAL=${HC_TERMINAL_ID:-} # or the terminal address confirmed by the user

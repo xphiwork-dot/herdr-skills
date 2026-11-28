@@ -10,6 +10,8 @@ description: >-
 
 Activate only when the assigning agent or user explicitly specifies `herdr-worker` (including `<hc from="..." reach="...">` assignments). Follow higher-priority host rules and the assignment; this skill grants no extra permissions.
 
+If Codex omitted your terminal address, look up the worker name assigned in the handoff with `hc get <worker-name>` in the intended core session. Confirm the worktree and recent handoff text with `hc read --lines 40 <worker-name>` before using the terminal address. Ask the orchestrator if identity remains ambiguous.
+
 ## Worker Rules
 
 1. **Stay strictly within your centralized worktree and assigned boundaries.**

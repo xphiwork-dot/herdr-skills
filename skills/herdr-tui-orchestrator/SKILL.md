@@ -12,7 +12,7 @@ description: >-
 
 Opt-in per request for the **Herdr TUI** (`herdr` multiplexer CLI — for `herdr-core` `hc` + `herdr-app`, use `herdr-orchestrator` instead).
 
-Before acting, resolve your pane and workspace with the read-only [herdr-tui-context.sh](./scripts/herdr-tui-context.sh) helper. It uses an exact Codex thread match from Herdr's agent registry when available and otherwise validates the inherited `HERDR_PANE_ID`.
+Before acting, resolve your pane and workspace with the read-only [herdr-tui-context.sh](./scripts/herdr-tui-context.sh) helper. It uses an exact Codex thread match from Herdr's agent registry when available and otherwise validates the inherited `HERDR_PANE_ID`. If both are missing, the helper looks up the current thread title in the local Codex session index and requires one unregistered Codex pane with that title and foreground directory. Confirm a title-based match against recent conversation text with `herdr pane read <pane_id> --lines 40` before dispatch.
 
 ```bash
 context=$("<skills-dir>/herdr-tui-orchestrator/scripts/herdr-tui-context.sh") || exit 1
